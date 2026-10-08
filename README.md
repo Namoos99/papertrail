@@ -1,10 +1,16 @@
 # PaperTrail
 
-An operations agent for a high-volume stationery warehouse: 15,000 SKUs, about 5,000 orders a week, six pick zones, sixteen pickers. It watches the live order pipeline, tells the operations lead what to deal with first, builds pick waves with walking-order pick lists, keeps reorder points honest, and finds the slot moves that cut the most walking. A Claude-powered assistant answers questions by calling the same tools the dashboard uses, and a local rule-based fallback keeps the floor running when the API isn't reachable.
+![PaperTrail](docs/wallpaper.png)
 
-The business is simulated. Two years of history (546,700 orders, 1.58 million lines) are generated from one seed with the patterns a real stationery distributor lives with: a long-tailed catalog, back-to-school and holiday peaks, planner season, wholesale case orders, promos, launches and phase-outs.
+**An AI operations agent for a high-volume stationery warehouse.** It watches the order pipeline, tells the ops lead what to deal with first, builds pick waves with walking-order pick lists, keeps reorder points honest, and finds the slot moves that cut the most walking.
+
+I built this to see how far I could take an agent past "chat with your data." The goal was something an operations lead could open at 7 a.m. and use: a ranked to-do list, pick lists a picker can follow, and an assistant that answers questions from the same numbers the dashboard shows.
+
+The business is simulated: 15,000 SKUs, about 5,000 orders a week, six pick zones, sixteen pickers. I generated two years of history (546,700 orders, 1.58 million lines) from a single seed, with the patterns a real stationery distributor deals with: a long-tailed catalog, back-to-school and holiday peaks, planner season, wholesale case orders, promos, launches and phase-outs. Everything below runs on that data, and the engine is written so real exports can replace it (see [Plugging in real data](#plugging-in-real-data)).
 
 ![Today view](docs/screenshot.png)
+
+**Stack:** Python, pandas, NumPy, FastAPI, the Anthropic API (tool use), pytest, and a single-file vanilla JS dashboard with no build step.
 
 ## What it does
 
@@ -27,19 +33,29 @@ The business is simulated. Two years of history (546,700 orders, 1.58 million li
 
 Category totals are where buying and staffing decisions are made, and the model is reliable there. SKU-week numbers for slow movers are mostly noise; the reorder logic absorbs that with safety stock rather than pretending a single week is predictable. See `DECISIONS.md`.
 
-## Using the app (plain-English guide)
+## Design choices
 
-The app has an in-product guide: press **? Guide** at the top right (or the `?` key). It has the daily routine, a picker's quick guide, example questions for the assistant, and a glossary. Every page also has a "How to use this page" box. The short version:
+- **The model never sees raw tables.** The engine computes everything (forecasts, reorder points, waves, exceptions) and exposes thirteen small tools that return JSON. Claude decides which tools to call and explains the results. Every number it quotes came from a tool call, so the dashboard, the pick list and the assistant can't disagree.
+- **It works without the API.** A rule-based router answers from the same tools when there's no key or the API is down. A warehouse floor shouldn't stop because of a rate limit.
+- **Simple forecast, honest evaluation.** Category seasonality times a per-SKU smoothed level, backtested on a held-out 8 weeks against two baselines. Individual slow-moving SKUs are noisy week to week, so the reorder logic absorbs that with safety stock instead of trusting one week's number. The reasoning is in `DECISIONS.md`.
+- **Recommendations show their math.** Click any SKU and you see the safety stock, reorder point and order quantity worked out step by step. I wanted a buyer to be able to disagree with a number and know why.
+- **Advice only.** PaperTrail never writes back to a WMS or ERP. It recommends, and a person approves.
 
-1. **Today.** Read "Do next" from the top and tick items off.
-2. **Orders.** Fix the problem orders, most urgent first. Each row says what to do.
-3. **Pick waves.** Open a wave, choose a zone, and hand the list to a picker. Pickers switch on **Floor view** and work top to bottom.
-4. **Inventory.** Keep "Reorder now" selected, copy the purchase plan as CSV, and send it to buying.
-5. **Slotting and Forecast.** Weekly: move the top few items closer to the pack station, and check the forecast before busy seasons.
+## How it fits together
 
-The assistant (right side, or the **Ask PaperTrail** tab on a phone) takes plain questions such as "Which orders will miss the truck?" or an order or item number.
+```
+data/generate.py ──► data/raw/*.parquet ──► engine/store.py ─┬─► agent/tools.py ──► agent/agent.py (Claude tool loop)
+                                                            │                     └► agent/fallback.py (offline)
+                                                            ├─► api/server.py (FastAPI: /api/*, /api/agent)
+                                                            └─► export.py ──► ui/data/*.json ──► ui/index.html
+```
 
-PaperTrail only gives advice. It never changes anything in your real systems, and your ticks are saved in the browser only.
+* `engine/forecast.py` seasonal index per category, exponential smoothing per SKU, robust σ, backtest
+* `engine/inventory.py` ABC classes, safety stock, reorder point, order-up-to quantity, stock status
+* `engine/orders.py` exception rules and recommended actions, picker scorecard
+* `engine/picking.py` wave building, SKU merge, zone split, S-shape routing, distance model
+* `engine/slotting.py` slot cost model and the swap list
+* `agent/tools.py` thirteen small tools that return computed JSON; the model never sees raw tables
 
 ## Run it
 
@@ -61,59 +77,23 @@ Ask from the terminal:
 python -m papertrail.agent.agent "Which orders will miss the truck?"
 ```
 
-Run the checks: `pytest -q`
+Run the tests with `pytest -q`. They cover engine invariants, tool contracts, fallback routing, the API, and the Claude loop against a fake client.
 
-Static copy for GitHub Pages: `python -m papertrail.export --site` writes `docs/`. Hosted that way the chat uses local answers, since a static page has nowhere to keep an API key.
+For a static copy (GitHub Pages), `python -m papertrail.export --site` writes `docs/`. Hosted that way the chat uses local answers, since a static page has nowhere to keep an API key.
 
-## Put it on GitHub
+## Walkthrough
 
-You need a free GitHub account and Git installed (check with `git --version`). These steps go once, in order.
+The dashboard has an in-app guide (the **? Guide** button, or press `?`) and a short "how to use this page" box on every tab. A typical morning:
 
-1. **Unzip** `papertrail.zip` and open a terminal in the new `papertrail` folder.
-2. **Create an empty repository on GitHub.** Go to <https://github.com/new>, name it `papertrail`, leave "Add a README", ".gitignore" and "license" all **unticked**, and press **Create repository**. Keep that page open.
-3. **Turn the folder into a repo and save the first commit:**
-   ```bash
-   git init
-   git add .
-   git commit -m "PaperTrail: warehouse operations agent"
-   ```
-   If Git says it doesn't know who you are, run `git config --global user.name "Your Name"` and `git config --global user.email "you@example.com"`, then repeat the commit.
-4. **Connect it to GitHub and upload** (replace `YOUR-USERNAME`):
-   ```bash
-   git branch -M main
-   git remote add origin https://github.com/YOUR-USERNAME/papertrail.git
-   git push -u origin main
-   ```
-   When asked to sign in, use your GitHub username and a **personal access token** as the password (GitHub > Settings > Developer settings > Personal access tokens, with the `repo` permission). Or run `gh auth login` first if you use the GitHub CLI.
-5. **Refresh the GitHub page.** Your code is there, and the **Actions** tab shows the tests running automatically.
+1. **Today:** work down the "Do next" list. It's ranked by what costs the most if ignored.
+2. **Orders:** each exception has a suggested fix, such as upgrading shipping, holding for an inbound PO, or offering an in-stock substitute.
+3. **Pick waves:** open a wave and zone for a pick list in walking order. Floor view switches to large type for use on the warehouse floor.
+4. **Inventory:** the purchase plan is grouped by supplier and rounded to case packs, and you can copy it as CSV.
+5. **Slotting and Forecast:** a weekly look at which swaps save the most walking, and what demand looks like before busy seasons.
 
-**Later changes:** `git add .`, `git commit -m "what changed"`, `git push`.
+## Plugging in real data
 
-**Optional, a live web page.** Run `python -m papertrail.export --site`, commit the new `docs/` folder and push. On GitHub open **Settings > Pages**, set Source to "Deploy from a branch", choose `main` and `/docs`, and save. Your app appears at `https://YOUR-USERNAME.github.io/papertrail/` after a minute. (The page works without a server, so it uses the built-in local assistant. To use Claude, run the server version above.)
-
-**Keep secrets out.** Your `ANTHROPIC_API_KEY` lives in a `.env` file, which is already ignored by Git. Never paste a key into a file you commit.
-
-## How it fits together
-
-```
-data/generate.py ──► data/raw/*.parquet ──► engine/store.py ─┬─► agent/tools.py ──► agent/agent.py (Claude tool loop)
-                                                            │                     └► agent/fallback.py (offline)
-                                                            ├─► api/server.py (FastAPI: /api/*, /api/agent)
-                                                            └─► export.py ──► ui/data/*.json ──► ui/index.html
-```
-
-* `engine/forecast.py` seasonal index per category, exponential smoothing per SKU, robust σ, backtest
-* `engine/inventory.py` ABC classes, safety stock, reorder point, order-up-to quantity, stock status
-* `engine/orders.py` exception rules and recommended actions, picker scorecard
-* `engine/picking.py` wave building, SKU merge, zone split, S-shape routing, distance model
-* `engine/slotting.py` slot cost model and the swap list
-* `agent/tools.py` thirteen small tools that return computed JSON; the model never sees raw tables
-
-The model reads numbers and explains them. Every figure it quotes comes from a tool call, so the dashboard, the pick list and the assistant always agree.
-
-## Using real data
-
-The generator writes five tables; replace them with exports from your WMS or ERP and everything downstream runs unchanged:
+The generator writes five tables; replace them with exports from your WMS or ERP and everything downstream should run unchanged. I haven't tested it against a real export yet, so expect some column mapping:
 
 | File | Columns the engine uses |
 |---|---|
@@ -122,6 +102,12 @@ The generator writes five tables; replace them with exports from your WMS or ERP
 | `orders.parquet` | order_id, created_at, channel, ship_method, ship_state, ship_by, status, status_since, shipped_at, picker, wave_id, hold_reason, pick_minutes, mispick |
 | `order_lines.parquet` | order_id, line_no, sku, qty, qty_allocated |
 | `purchase_orders.parquet` | po_id, sku, supplier, qty, eta |
+
+## What's next
+
+- A CSV import command with column validation, so a bad export fails with a useful message instead of a stack trace.
+- Hierarchical forecasting to improve the slow-mover SKU-week numbers.
+- Write-back to a WMS or ERP behind an approval step.
 
 ## Project layout
 
