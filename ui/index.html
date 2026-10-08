@@ -1,0 +1,1106 @@
+<title>PaperTrail Ops</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;600;700;800&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: an operations console — sticky header with the floor clock, tab rail,
+   work area on the left, the agent docked on the right at desktop widths. */
+:root{
+  --paper:#f3f8f4; --sheet:#ffffff; --sheet-2:#f8fbf9; --ink:#12241a; --ink-2:#3f5246; --ink-3:#5b6d62;
+  --rule:#d3e2d8; --rule-2:#e5efe8;
+  --accent:#17734a; --accent-ink:#ffffff; --accent-soft:#e0f2e8;
+  --hi:rgba(94,196,138,.38);
+  --crit:#b42318; --crit-soft:#fbe9e7; --warn:#9a5a06; --warn-soft:#fbf0dc; --good:#2a7a30; --good-soft:#e3f1e3;
+  --info:#5b3fb0; --info-soft:#eee9fa;
+  --s-ly:#7a4fd0;
+  --f-display:"Schibsted Grotesk",ui-sans-serif,system-ui,sans-serif;
+  --f-body:"Public Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r:6px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0f1612; --sheet:#151e19; --sheet-2:#1a2520; --ink:#e4efe8; --ink-2:#aebfb4; --ink-3:#86998d;
+  --rule:#26362d; --rule-2:#1f2d26;
+  --accent:#3aa874; --accent-ink:#07140d; --accent-soft:#153324;
+  --hi:rgba(80,190,130,.28);
+  --crit:#f08a7e; --crit-soft:#3a201e; --warn:#e2a650; --warn-soft:#33270f; --good:#7fd48f; --good-soft:#17301c;
+  --info:#b7a4f0; --info-soft:#28223f;
+  --s-ly:#8a6ee0; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0f1612; --sheet:#151e19; --sheet-2:#1a2520; --ink:#e4efe8; --ink-2:#aebfb4; --ink-3:#86998d;
+  --rule:#26362d; --rule-2:#1f2d26;
+  --accent:#3aa874; --accent-ink:#07140d; --accent-soft:#153324;
+  --hi:rgba(80,190,130,.28);
+  --crit:#f08a7e; --crit-soft:#3a201e; --warn:#e2a650; --warn-soft:#33270f; --good:#7fd48f; --good-soft:#17301c;
+  --info:#b7a4f0; --info-soft:#28223f;
+  --s-ly:#8a6ee0; color-scheme:dark}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--paper);color:var(--ink);font:15px/1.5 var(--f-body);-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;letter-spacing:-.01em}
+h2{font-size:1.25rem;font-weight:700}
+h3{font-size:1rem;font-weight:700}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num,.tab-num{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--f-mono);font-size:.86em}
+.muted{color:var(--ink-3)} .soft{color:var(--ink-2)}
+.hl{background:linear-gradient(transparent 52%,var(--hi) 52%,var(--hi) 92%,transparent 92%);padding:0 .1em}
+.eyebrow{font:600 .72rem/1 var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+
+/* header */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--paper);border-bottom:1px solid var(--rule)}
+.top-in{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:12px 16px 0;max-width:1600px;margin:0 auto}
+.brand{display:flex;align-items:baseline;gap:10px;min-width:0}
+.brand h1{font-size:1.35rem;font-weight:800;letter-spacing:-.02em}
+.brand h1 b{color:var(--accent)}
+.brand .co{color:var(--ink-3);font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.clock{margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:.85rem}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--rule);background:var(--sheet);border-radius:999px;padding:3px 10px;white-space:nowrap}
+.chip .dot{width:7px;height:7px;border-radius:50%;background:var(--warn)}
+.chip.cut .dot{background:var(--crit)}
+nav.tabs{display:flex;gap:2px;overflow-x:auto;padding:8px 16px 0;max-width:1600px;margin:0 auto;scrollbar-width:none}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs button{border:0;background:none;padding:8px 12px 10px;border-bottom:2px solid transparent;color:var(--ink-2);font-weight:600;cursor:pointer;white-space:nowrap;display:flex;gap:6px;align-items:center}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+nav.tabs button .badge{background:var(--crit-soft);color:var(--crit);border-radius:999px;font-size:.72rem;padding:0 6px;font-weight:700}
+nav.tabs .ask-tab{margin-left:auto}
+
+/* shell */
+.shell{max-width:1600px;margin:0 auto;padding:20px 16px 40px;display:grid;grid-template-columns:minmax(0,1fr);gap:24px}
+@media (min-width:1200px){
+  .shell{grid-template-columns:minmax(0,1fr) 400px}
+  nav.tabs .ask-tab{display:none}
+  #view-ask{display:none!important}
+}
+aside.dock{display:none}
+@media (min-width:1200px){aside.dock{display:block;position:sticky;top:112px;height:calc(100vh - 136px);min-height:420px}}
+.view{display:flex;flex-direction:column;gap:20px;min-width:0}
+.panel{background:var(--sheet);border:1px solid var(--rule);border-radius:var(--r);padding:16px;min-width:0}
+.panel-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:20px}
+.note{font-size:.84rem;color:var(--ink-3);max-width:70ch}
+
+/* pipeline strip */
+.pipe{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border:1px solid var(--rule);border-radius:var(--r);background:var(--sheet);overflow:hidden}
+.pipe > div{padding:12px 14px;border-right:1px solid var(--rule-2);min-width:0}
+.pipe > div:last-child{border-right:0}
+.pipe .n{font:700 1.6rem/1.1 var(--f-display);font-variant-numeric:tabular-nums}
+.pipe .l{font-size:.78rem;color:var(--ink-3);line-height:1.3}
+.pipe .hold .n{color:var(--warn)}
+@media (max-width:640px){.pipe{grid-template-columns:repeat(3,minmax(0,1fr))}.pipe > div:nth-child(3){border-right:0}.pipe > div:nth-child(-n+3){border-bottom:1px solid var(--rule-2)}}
+
+/* actions */
+.actions{display:flex;flex-direction:column}
+.act{display:grid;grid-template-columns:auto 92px minmax(0,1fr) auto;gap:12px;align-items:start;padding:12px 0;border-top:1px solid var(--rule-2)}
+.act:first-child{border-top:0}
+.act input{margin-top:4px;width:18px;height:18px;accent-color:var(--accent)}
+.act .area{font:600 .72rem/1.9 var(--f-body);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.act .t{font-weight:600}
+.act .d{font-size:.88rem;color:var(--ink-2)}
+.act.done .t,.act.done .d{text-decoration:line-through;color:var(--ink-3)}
+.linkbtn{border:1px solid var(--rule);background:var(--sheet-2);border-radius:var(--r);padding:4px 10px;cursor:pointer;font-size:.84rem;font-weight:600;white-space:nowrap}
+.linkbtn:hover{border-color:var(--accent);color:var(--accent)}
+@media (max-width:640px){.act{grid-template-columns:auto minmax(0,1fr)}.act .area{grid-column:2}.act .body{grid-column:2}.act .go{grid-column:2;justify-self:start}}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:12px}
+.stat{padding:12px 14px;border:1px solid var(--rule);border-radius:var(--r);background:var(--sheet)}
+.stat .v{font:700 1.45rem/1.15 var(--f-display);font-variant-numeric:tabular-nums}
+.stat .k{font-size:.8rem;color:var(--ink-3)}
+.stat .s{font-size:.8rem;color:var(--ink-2);margin-top:2px}
+
+/* tables */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--rule);border-radius:var(--r);background:var(--sheet)}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th{font:600 .72rem/1.2 var(--f-body);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);text-align:left;padding:9px 10px;border-bottom:1px solid var(--rule);background:var(--sheet-2);white-space:nowrap;position:sticky;top:0}
+th.r,td.r{text-align:right}
+td{padding:8px 10px;border-bottom:1px solid var(--rule-2);vertical-align:top;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:0}
+td.mono,td.nw{white-space:nowrap}
+tbody tr.click{cursor:pointer}
+tbody tr.click:hover td{background:var(--sheet-2)}
+th button{border:0;background:none;padding:0;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit;cursor:pointer}
+th button[aria-sort]{color:var(--ink)}
+.sev{border-left:3px solid transparent}
+.sev-1{border-left-color:var(--crit)} .sev-2{border-left-color:var(--warn)} .sev-3{border-left-color:var(--ink-3)}
+
+/* pills and bin labels */
+.pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:1px 8px;font-size:.76rem;font-weight:600;white-space:nowrap;background:var(--rule-2);color:var(--ink-2)}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.p-crit{background:var(--crit-soft);color:var(--crit)} .p-warn{background:var(--warn-soft);color:var(--warn)}
+.p-good{background:var(--good-soft);color:var(--good)} .p-info{background:var(--info-soft);color:var(--info)}
+.bin{font:600 .8rem/1 var(--f-mono);border:1px solid var(--ink-3);border-radius:3px;padding:3px 6px;background:var(--sheet);white-space:nowrap;display:inline-block;letter-spacing:.02em}
+.bin.big{font-size:1.05rem;padding:6px 9px}
+.abc{font:700 .74rem/1 var(--f-mono);display:inline-grid;place-items:center;width:20px;height:20px;border-radius:4px;background:var(--rule-2);color:var(--ink-2)}
+.abc.A{background:var(--accent);color:var(--accent-ink)}
+
+/* filters */
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.fchip{border:1px solid var(--rule);background:var(--sheet);border-radius:999px;padding:4px 11px;cursor:pointer;font-size:.84rem;white-space:nowrap}
+.fchip[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.fchip .c{color:var(--ink-3);margin-left:4px;font-variant-numeric:tabular-nums}
+.fchip[aria-pressed="true"] .c{color:inherit;opacity:.7}
+input[type=search],select{border:1px solid var(--rule);background:var(--sheet);border-radius:var(--r);padding:7px 10px;min-width:0}
+input[type=search]{width:min(100%,280px)}
+.btn{border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);border-radius:var(--r);padding:7px 14px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn:disabled{opacity:.5;cursor:default}
+
+/* waves */
+.waves{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,210px),1fr));gap:10px}
+.wave{border:1px solid var(--rule);border-radius:var(--r);background:var(--sheet);padding:12px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:4px}
+.wave[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.wave .id{font:600 .9rem var(--f-mono)}
+.wave .m{font-size:.82rem;color:var(--ink-2)}
+.wave .bar{height:4px;background:var(--rule-2);border-radius:2px;overflow:hidden;margin-top:6px}
+.wave .bar i{display:block;height:100%;background:var(--good)}
+.zone-tabs{display:flex;gap:6px;flex-wrap:wrap}
+.stops{display:flex;flex-direction:column}
+.stop{display:grid;grid-template-columns:28px auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 4px;border-top:1px solid var(--rule-2)}
+.stop:first-child{border-top:0}
+.stop input{width:20px;height:20px;accent-color:var(--good)}
+.stop .q{font:700 1.05rem var(--f-display);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.stop .nm{font-size:.88rem;min-width:0}
+.stop .od{font-size:.76rem;color:var(--ink-3);overflow-wrap:anywhere}
+.stop.done{opacity:.45}
+.floor .stop{grid-template-columns:36px auto minmax(0,1fr) auto;padding:16px 4px}
+@media (max-width:560px){.stop,.floor .stop{grid-template-columns:auto auto minmax(0,1fr) auto;row-gap:6px}.stop .nm{grid-column:2/-1;grid-row:2}.stop .q{grid-column:4;grid-row:1}}
+.floor .stop input{width:28px;height:28px}
+.floor .bin{font-size:1.25rem;padding:8px 10px}
+.floor .stop .q{font-size:1.6rem}
+.floor .stop .nm{font-size:1rem}
+.route svg{width:100%;height:auto;display:block}
+
+/* charts */
+.chart{position:relative;min-width:0}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart .axis text{fill:var(--ink-3);font:11px var(--f-body);font-variant-numeric:tabular-nums}
+.chart .grid line{stroke:var(--rule-2)}
+.chart .base{stroke:var(--rule)}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--paper);font-size:.78rem;border-radius:4px;padding:6px 8px;white-space:nowrap;transform:translate(-50%,-110%);z-index:3}
+.tip[hidden]{display:none}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.8rem;color:var(--ink-2);margin-bottom:6px}
+.legend i{display:inline-block;width:16px;height:0;border-top:2px solid;vertical-align:middle;margin-right:6px}
+.legend i.dash{border-top-style:dashed}
+
+/* zone heat */
+.heat{display:flex;flex-direction:column;gap:10px}
+.heat .row{display:grid;grid-template-columns:150px minmax(0,1fr) 92px;gap:12px;align-items:center;font-size:.86rem}
+.heat .track{position:relative;height:14px;background:var(--rule-2);border-radius:3px}
+.heat .now{position:absolute;left:0;top:0;bottom:0;background:var(--warn);border-radius:3px 0 0 3px}
+.heat .ideal{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink)}
+@media (max-width:560px){.heat .row{grid-template-columns:minmax(0,1fr) 80px}.heat .track{grid-column:1/-1;order:3}}
+
+/* sku sheet */
+.sheet-bg{position:fixed;inset:0;background:rgba(10,14,20,.38);z-index:40}
+.sheet{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);background:var(--sheet);z-index:41;overflow-y:auto;padding:calc(20px + env(safe-area-inset-top,0px)) 20px calc(24px + env(safe-area-inset-bottom,0px));border-left:1px solid var(--rule);display:flex;flex-direction:column;gap:16px}
+.sheet .x{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));right:14px}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));gap:12px}
+.kv div{border-top:1px solid var(--rule-2);padding-top:6px}
+.kv dt{font-size:.75rem;color:var(--ink-3)} .kv dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums}
+.math{font:.84rem/1.6 var(--f-mono);background:var(--sheet-2);border:1px solid var(--rule-2);border-radius:var(--r);padding:10px 12px;overflow-x:auto}
+
+/* chat */
+.chat{display:flex;flex-direction:column;height:100%;min-height:520px;background:var(--sheet);border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
+.chat-h{padding:12px 14px;border-bottom:1px solid var(--rule);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.chat-h .mode{font-size:.75rem}
+.msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px;min-height:0}
+.msg{max-width:100%;font-size:.9rem;min-width:0}
+.msg.u{align-self:flex-end;background:var(--accent-soft);border-radius:10px 10px 2px 10px;padding:8px 12px;max-width:88%}
+.msg.a{border-left:2px solid var(--accent);padding-left:10px}
+.msg.a p{margin:.3em 0} .msg.a ul,.msg.a ol{margin:.3em 0;padding-left:1.2em}
+.msg.a table{font-size:.8rem;margin:.4em 0}
+.msg.a .tw{overflow-x:auto;max-width:100%}
+.msg.a td,.msg.a th{padding:4px 6px}
+.msg .tools{font-size:.72rem;color:var(--ink-3);margin-top:4px}
+.sugg{display:flex;gap:6px;flex-wrap:wrap;padding:0 14px 10px}
+.sugg button{border:1px dashed var(--rule);background:var(--sheet-2);border-radius:999px;padding:4px 10px;font-size:.8rem;cursor:pointer;text-align:left}
+.chat form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--rule)}
+.chat textarea{flex:1;resize:none;border:1px solid var(--rule);border-radius:var(--r);padding:8px 10px;background:var(--sheet-2);font:inherit;min-height:42px;max-height:140px;color:var(--ink)}
+.thinking{color:var(--ink-3);font-style:italic}
+@media (prefers-reduced-motion:no-preference){.thinking{animation:pulse 1.4s ease-in-out infinite}@keyframes pulse{50%{opacity:.45}}}
+
+/* guides */
+.guide-btn{padding:4px 12px;border-radius:999px;font-size:.85rem}
+details.how{background:var(--accent-soft);border:1px solid var(--rule);border-radius:var(--r);padding:0}
+details.how summary{cursor:pointer;padding:10px 14px;font-weight:600;color:var(--accent);list-style:none;display:flex;align-items:center;gap:8px}
+details.how summary::-webkit-details-marker{display:none}
+details.how summary::before{content:"?";display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-size:.78rem;font-weight:800}
+details.how summary::after{content:"Show";margin-left:auto;font-weight:500;font-size:.8rem;color:var(--ink-3)}
+details.how[open] summary::after{content:"Hide"}
+details.how .how-b{padding:0 14px 12px;color:var(--ink)}
+details.how ol,details.how ul{margin:.2em 0 .4em;padding-left:1.3em} details.how li{margin:.25em 0}
+details.how p{margin:.4em 0}
+details.how .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:4px 24px}
+.welcome{border-color:var(--accent);box-shadow:inset 4px 0 0 var(--accent)}
+.welcome p{margin:.2em 0 .8em;max-width:75ch}
+.steps4{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:10px;list-style:none;margin:0 0 12px;padding:0}
+.steps4 button{width:100%;height:100%;text-align:left;border:1px solid var(--rule);background:var(--sheet-2);border-radius:var(--r);padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:4px}
+.steps4 button:hover{border-color:var(--accent)}
+.steps4 .no{width:26px;height:26px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font:700 .9rem var(--f-display)}
+.steps4 b{font-family:var(--f-display)} .steps4 span.d{font-size:.84rem;color:var(--ink-2)}
+.gloss{margin:0;display:grid;grid-template-columns:minmax(0,1fr);gap:0}
+.gloss dt{font-weight:700;margin-top:10px} .gloss dd{margin:2px 0 0;color:var(--ink-2);font-size:.9rem}
+.gnav{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+a.linkbtn{text-decoration:none;color:var(--ink);display:inline-block}
+a.linkbtn:hover{color:var(--accent)}
+.sheet h3.gh{margin-top:4px;padding-top:10px;border-top:1px solid var(--rule)}
+.sheet ol,.sheet ul{margin:.3em 0;padding-left:1.3em} .sheet li{margin:.3em 0}
+.legend-box{font-size:.84rem;color:var(--ink-2)}
+@media print{
+  body.printing > *:not(.sheet){display:none!important}
+  body.printing .sheet{position:static;width:auto;border:0;overflow:visible}
+  body.printing .sheet .x,body.printing .sheet .noprint{display:none}
+}
+.toast{position:fixed;bottom:calc(16px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:8px 14px;border-radius:var(--r);font-size:.86rem;z-index:60}
+.loading{padding:60px 16px;text-align:center;color:var(--ink-3)}
+footer{max-width:1600px;margin:0 auto;padding:0 16px 32px;font-size:.78rem;color:var(--ink-3)}
+</style>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand"><h1>Paper<b>Trail</b></h1><span class="co" id="co">Order &amp; inventory agent</span></div>
+    <div class="clock" id="clock"></div>
+    <button class="btn ghost guide-btn" id="guide-btn" aria-haspopup="dialog" title="Instructions, a plain-English glossary and tips (press ? on your keyboard)">? Guide</button>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" title="Your daily checklist" data-v="today" aria-selected="true">Today</button>
+    <button role="tab" title="Orders with problems, and what to do about them" data-v="orders">Orders <span class="badge" id="b-orders" hidden></span></button>
+    <button role="tab" title="Pick lists for the floor" data-v="waves">Pick waves</button>
+    <button role="tab" title="What to reorder, and what is overstocked" data-v="inventory">Inventory <span class="badge" id="b-inv" hidden></span></button>
+    <button role="tab" title="Which items to move closer to the pack station" data-v="slotting">Slotting</button>
+    <button role="tab" title="What we expect to sell" data-v="forecast">Forecast</button>
+    <button role="tab" title="Ask the assistant a question" data-v="ask" class="ask-tab">Ask PaperTrail</button>
+  </nav>
+</header>
+
+<div class="shell">
+  <main id="main"><div class="loading">Loading 104 weeks of warehouse history…</div></main>
+  <aside class="dock" id="dock" aria-label="Agent"></aside>
+</div>
+<footer id="foot"></footer>
+<div id="tip-root"></div>
+
+<script>
+(() => {
+"use strict";
+// ------------------------------------------------------------------ utils
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const nf = new Intl.NumberFormat("en-US");
+const n = v => v == null ? "—" : nf.format(Math.round(v));
+const n1 = v => v == null ? "—" : (Math.round(v * 10) / 10).toLocaleString("en-US");
+const money = v => v == null ? "—" : "$" + nf.format(Math.round(v));
+const kmoney = v => v >= 1e6 ? "$" + (v / 1e6).toFixed(2) + "M" : v >= 1e4 ? "$" + Math.round(v / 1e3) + "k" : money(v);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("pt:" + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("pt:" + k, JSON.stringify(v)); } catch {} },
+};
+function toast(msg) {
+  const t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
+  document.body.append(t); setTimeout(() => t.remove(), 2200);
+}
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); toast("Copied"); }
+  catch { const ta = document.createElement("textarea"); ta.value = text; document.body.append(ta); ta.select(); toast("Press Ctrl/Cmd+C to copy"); setTimeout(() => ta.remove(), 4000); }
+}
+const fmtDay = iso => new Date(iso + "T12:00").toLocaleDateString("en-US", {weekday: "short", month: "short", day: "numeric"});
+const fmtShort = iso => new Date(iso + "T12:00").toLocaleDateString("en-US", {month: "short", day: "numeric"});
+
+const STATUS_PILL = {"Stockout": "p-crit", "Reorder now": "p-warn", "Watch": "p-warn", "Healthy": "p-good", "Overstock": "p-info", "Slow mover": ""};
+const EX_PILL = {"Late": "p-crit", "At risk": "p-warn", "Short": "p-warn", "Stuck": "", "On hold": "p-info"};
+const pill = (t, cls) => `<span class="pill ${cls ?? ""}">${esc(t)}</span>`;
+const bin = (loc, big) => `<span class="bin${big ? " big" : ""}">${esc(loc)}</span>`;
+
+// ------------------------------------------------------------------ data
+const D = {meta: null, skus: null, sales: null, orders: null, idx: new Map()};
+async function getJSON(p) { const r = await fetch(p); if (!r.ok) throw new Error(p + " " + r.status); return r.json(); }
+async function loadSales() { if (!D.sales) D.sales = await getJSON("data/sales.json"); return D.sales; }
+async function loadOrders() {
+  if (!D.orders) { const o = await getJSON("data/orders.json"); D.orders = new Map(o.orders.map(x => [x.id, x])); }
+  return D.orders;
+}
+const S = i => { // row view of a SKU by index
+  const k = D.skus;
+  return {i, sku: k.sku[i], name: k.name[i], category: k.cats[k.cat[i]], abc: k.abc[i], status: k.statuses[k.st[i]],
+    location: k.loc[i], on_hand: k.oh[i], available: k.av[i], on_order: k.oo[i], next_po_eta: k.eta[i],
+    daily_demand: k.dd[i], reorder_point: k.rop[i], safety_stock: k.ss[i], suggested_qty: k.sq[i],
+    days_of_cover: k.cov[i], projected_stockout: k.so[i], supplier: k.suppliers[k.sup[i]], lead_time_days: k.lt[i],
+    case_pack: k.cp[i], unit_price: k.price[i], unit_cost: k.cost[i], picks_per_week: k.ppw[i],
+    fcst_4wk: k.f4[i], sold_4wk: k.s4[i], sold_52wk: k.s52[i], revenue_at_risk: k.rar[i], overstock_value: k.ovv[i]};
+};
+const skuIdx = id => D.idx.get(String(id).toUpperCase().replace(/^PT-?/, "PT-"));
+
+// ------------------------------------------------------------------ charts
+function chart(el, {labels, series, h = 220, yLabel = "", bars = false, onHover, splitAt = null, fmtX = l => l}) {
+  const W = Math.max(300, el.clientWidth || 600), H = h, m = {t: 10, r: 12, b: 26, l: 44};
+  const iw = W - m.l - m.r, ih = H - m.t - m.b, N = labels.length;
+  const all = series.flatMap(s => s.values.filter(v => v != null));
+  const raw = Math.max(1, ...all) / 4, p = Math.pow(10, Math.floor(Math.log10(raw)));
+  const stepv = [1, 2, 2.5, 5, 10].map(k => k * p).find(v => v >= raw);
+  const max = stepv * 4, ticks = [0, stepv, stepv * 2, stepv * 3, max];
+  const x = i => bars ? m.l + (i + .5) * iw / N : m.l + (N === 1 ? iw / 2 : i * iw / (N - 1));
+  const y = v => m.t + ih - v / max * ih;
+  const fmtY = v => v >= 1000 ? (v / 1000).toFixed(v % 1000 ? 1 : 0) + "k" : String(+v.toFixed(2));
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(yLabel)}"><g class="grid">`;
+  ticks.forEach(t => svg += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}"/>`);
+  svg += `</g><g class="axis">`;
+  ticks.forEach(t => svg += `<text x="${m.l - 8}" y="${y(t) + 4}" text-anchor="end">${fmtY(t)}</text>`);
+  const step = Math.max(1, Math.ceil(N / Math.max(2, Math.floor(iw / 70))));
+  for (let i = 0; i < N; i += step) svg += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${esc(fmtX(labels[i]))}</text>`;
+  svg += `</g><line class="base" x1="${m.l}" x2="${W - m.r}" y1="${y(0)}" y2="${y(0)}"/>`;
+  if (splitAt != null) svg += `<line x1="${(x(splitAt - 1) + x(splitAt)) / 2}" x2="${(x(splitAt - 1) + x(splitAt)) / 2}" y1="${m.t}" y2="${m.t + ih}" stroke="var(--ink-3)" stroke-dasharray="2 3"/><text x="${(x(splitAt - 1) + x(splitAt)) / 2 + 6}" y="${m.t + 10}" fill="var(--ink-3)" font-size="11">forecast →</text>`;
+  if (bars) {
+    const k = series.length, bw = Math.max(2, Math.min(28, iw / N / k - 3));
+    series.forEach((s, si) => s.values.forEach((v, i) => {
+      if (v == null) return;
+      const bx = x(i) - (k * (bw + 2)) / 2 + si * (bw + 2), by = y(v), bh = y(0) - by;
+      svg += `<path d="M${bx},${y(0)} V${by + Math.min(4, bh)} q0,-${Math.min(4, bh)} ${Math.min(4, bw / 2)},-${Math.min(4, bh)} H${bx + bw - Math.min(4, bw / 2)} q${Math.min(4, bw / 2)},0 ${Math.min(4, bw / 2)},${Math.min(4, bh)} V${y(0)} Z" fill="${s.color}" opacity="${s.opacity ?? 1}"/>`;
+    }));
+  } else {
+    series.forEach(s => {
+      let d = "", pen = false;
+      s.values.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? "L" : "M") + x(i).toFixed(1) + "," + y(v).toFixed(1); pen = true; });
+      const lastI = s.values.length - 1 - [...s.values].reverse().findIndex(v => v != null);
+      if (s.area) svg += `<path d="${d}L${x(lastI)},${y(0)}L${x(s.values.findIndex(v => v != null))},${y(0)}Z" fill="${s.color}" opacity=".08"/>`;
+      svg += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" ${s.dash ? 'stroke-dasharray="5 4"' : ""}/>`;
+      const li = lastI;
+      if (s.end && li >= 0) svg += `<circle cx="${x(li)}" cy="${y(s.values[li])}" r="4" fill="${s.color}" stroke="var(--sheet)" stroke-width="2"/>`;
+    });
+  }
+  svg += `<line class="xh" x1="0" x2="0" y1="${m.t}" y2="${m.t + ih}" stroke="var(--ink-3)" visibility="hidden"/><rect x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent" class="hit"/></svg><div class="tip" hidden></div>`;
+  el.innerHTML = svg; el.classList.add("chart");
+  const sv = el.querySelector("svg"), tip = el.querySelector(".tip"), xh = el.querySelector(".xh");
+  const pick = ev => { const r = sv.getBoundingClientRect(); const px = (ev.clientX - r.left) * W / r.width;
+    let best = 0, bd = 1e9; for (let i = 0; i < N; i++) { const d = Math.abs(x(i) - px); if (d < bd) { bd = d; best = i; } } return best; };
+  sv.addEventListener("pointermove", ev => {
+    const i = pick(ev), r = sv.getBoundingClientRect();
+    xh.setAttribute("x1", x(i)); xh.setAttribute("x2", x(i)); xh.setAttribute("visibility", "visible");
+    tip.hidden = false; tip.style.left = (x(i) * r.width / W) + "px"; tip.style.top = (m.t * r.height / H + 4) + "px";
+    tip.innerHTML = `<b>${esc(fmtX(labels[i]))}</b>` + series.filter(s => s.values[i] != null).map(s => `<br>${esc(s.name)}: ${n(s.values[i])}`).join("");
+    onHover && onHover(i);
+  });
+  sv.addEventListener("pointerleave", () => { tip.hidden = true; xh.setAttribute("visibility", "hidden"); });
+}
+const legend = items => `<div class="legend">${items.map(([name, color, dash]) => `<span><i class="${dash ? "dash" : ""}" style="border-color:${color}"></i>${esc(name)}</span>`).join("")}</div>`;
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const redraws = []; let rT;
+addEventListener("resize", () => { clearTimeout(rT); rT = setTimeout(() => redraws.forEach(f => f()), 120); });
+const mq = matchMedia("(prefers-color-scheme: dark)"); mq.addEventListener?.("change", () => redraws.forEach(f => f()));
+
+// ------------------------------------------------------------------ header
+function header() {
+  const now = new Date(D.meta.now);
+  const mins = Math.round(D.meta.cutoff_hour * 60 - (now.getHours() * 60 + now.getMinutes()));
+  $("#co").textContent = D.meta.company + " · " + n(D.meta.history.skus) + " SKUs";
+  $("#clock").innerHTML =
+    `<span class="chip"><span class="dot"></span>${now.toLocaleDateString("en-US", {weekday: "short", month: "short", day: "numeric"})} · ${now.toLocaleTimeString("en-US", {hour: "numeric", minute: "2-digit"})}</span>` +
+    (mins > 0 ? `<span class="chip cut"><span class="dot"></span>Carrier pickup in ${mins} min</span>` : "") +
+    `<span class="chip muted">Synthetic demo data</span>`;
+  const ex = D.meta.exceptions.length, so = D.meta.briefing.inventory["Stockout"];
+  if (ex) { $("#b-orders").hidden = false; $("#b-orders").textContent = ex; }
+  if (so) { $("#b-inv").hidden = false; $("#b-inv").textContent = so; }
+  $("#foot").innerHTML = `Simulated history: ${n(D.meta.history.orders)} orders, ${n(D.meta.history.lines)} lines over ${D.meta.history.weeks} weeks, ${n(D.meta.history.slots)} warehouse slots across zones A–F. Checkboxes and done-marks are saved in this browser only.`;
+}
+
+// ------------------------------------------------------------------ guides
+const howto = (key, title, body) => `<details class="how" data-k="${key}" ${store.get("how:" + key, true) ? "open" : ""}><summary>${esc(title)}</summary><div class="how-b">${body}</div></details>`;
+const GLOSSARY = [
+  ["Order exception", "An order that needs a person: it is late, will miss the truck, can't be filled in full, is stuck, or is on hold. The Orders page lists each one with a suggested fix."],
+  ["Late / At risk / Short / Stuck / On hold", "Late = past its ship-by date. At risk = won't make today's truck at the current pace. Short = not enough stock for every line. Stuck = sitting in one step too long. On hold = waiting for a person to release it."],
+  ["Wave", "A batch of up to 50 orders picked together, so pickers make one trip instead of many. Waves are ordered by urgency: ship-by date first, then Overnight, Expedited, Ground."],
+  ["Zone (A–F)", "A section of the warehouse. Each wave is split by zone so a picker stays in one area."],
+  ["Slot / bin", "The shelf location of an item, like A-12-L3. Shown in a boxed label throughout."],
+  ["Pick list", "The list of stops a picker walks, already in walking order. Pick the total quantity at each stop, then sort into order totes at the pack station."],
+  ["Serpentine route", "Walking up one aisle, down the next, and so on, so nobody backtracks. Drawn as the green line on the map."],
+  ["On hand vs Available", "On hand = physically on the shelf. Available = on hand minus what is already reserved for open orders. Reorder decisions use Available."],
+  ["On order", "Stock you have already bought from the supplier that hasn't arrived yet."],
+  ["Reorder point", "The stock level at which it's time to buy more. When Available + On order falls to this number, the item shows as Reorder now."],
+  ["Safety stock", "Extra cushion kept for surprise demand or a late delivery. Fast, important items get a bigger cushion."],
+  ["Days of cover", "How many days the available stock lasts at the forecast sales rate."],
+  ["Class A / B / C", "A = the best sellers (kept in stock 95% of the time), B = middle (90%), C = slow items (85%)."],
+  ["Order qty", "How much to buy, rounded up to full case packs."],
+  ["Case pack", "The number of units in one supplier case. You can only order whole cases."],
+  ["Revenue at risk", "Sales you would likely lose if an item runs out before new stock lands."],
+  ["Overstock", "More stock than you'll likely sell soon. It ties up cash and shelf space."],
+  ["Slotting", "Deciding which item lives where. Fast movers belong close to the pack station so pickers walk less."],
+  ["Swap", "Two items trade slots. The Slotting page ranks swaps by the picker-hours they save each week."],
+  ["Forecast", "Our estimate of future sales, built from seasonal patterns and each item's recent history. It is more reliable for whole categories than for one slow item."],
+  ["WAPE", "The forecast's average miss as a percentage of units sold. Lower is better; 10% means it's off by about one unit in ten."],
+  ["Mispick", "A picker took the wrong item or quantity. Shown as a percentage of lines picked."],
+];
+function guideHTML() {
+  return `<div><div class="eyebrow">Guide</div><h2 style="margin-top:6px;padding-right:70px">How to use PaperTrail</h2>
+    <p class="soft">PaperTrail reads your orders and stock and tells you what to do next. It only gives advice. It never changes anything in your real systems.</p>
+    <div class="gnav noprint"><a class="linkbtn" href="#g-day">Your day</a><a class="linkbtn" href="#g-pick">For pickers</a><a class="linkbtn" href="#g-ask">Ask the assistant</a><a class="linkbtn" href="#g-gloss">Glossary</a><a class="linkbtn" href="#g-faq">FAQ</a></div></div>
+  <div id="g-day"><h3 class="gh">Your day in 4 steps</h3><ol>
+    <li><b>Today.</b> Open the <i>Today</i> tab. Read the "Do next" list. Tick each item when it's done.</li>
+    <li><b>Orders.</b> Open <i>Orders</i>. Start at the top (most urgent). Each row says what's wrong and what to do. Click a row to see the whole order.</li>
+    <li><b>Pick waves.</b> Open <i>Pick waves</i>. Choose the first wave, then each zone, and hand the pick list to a picker (or press <i>Copy pick list</i>).</li>
+    <li><b>Inventory.</b> Open <i>Inventory</i> and keep "Reorder now" selected. The purchase plan at the top shows what to buy from each supplier. Press <i>Copy as CSV</i> and send it to buying.</li></ol>
+    <p class="note">Once a week: look at <i>Slotting</i> and move the top few items closer to the pack station, and check <i>Forecast</i> before big seasons.</p></div>
+  <div id="g-pick"><h3 class="gh">For pickers</h3><ol>
+    <li>Open <i>Pick waves</i> and tap your wave, then your zone.</li>
+    <li>Switch on <b>Floor view</b> for big buttons and large type.</li>
+    <li>Go to the first slot, take the quantity shown (× number), and tick the box. The list is already in walking order, so just work top to bottom.</li>
+    <li>The number is the <b>total for the whole wave</b>. At the pack station you sort it into each order's tote. The small order numbers under the item tell you where it goes.</li>
+    <li>The map shows your path. Dots are your stops. Your ticks are saved on this device, so you can close the page and come back.</li></ol></div>
+  <div id="g-ask"><h3 class="gh">Ask the assistant</h3>
+    <p>Type a question in plain words in the chat box, or tap one of the suggested questions. Good ones to try:</p>
+    <ul><li><i>What should I deal with first?</i></li><li><i>Which orders will miss the truck?</i></li><li><i>SO-1546575</i> (any order number) or <i>PT-10234</i> (any item number)</li><li><i>Which POs do I approve today?</i></li><li><i>How many pickers do I need tomorrow?</i></li><li><i>Who needs coaching?</i></li><li><i>Top slotting moves for zone A</i></li></ul>
+    <p class="note">Answers come from the same numbers you see on the pages, and the line under each answer lists what was checked. If it says "Local answer", the assistant is working without Claude but still uses your data.</p></div>
+  <div id="g-gloss"><h3 class="gh">Plain-English glossary</h3><dl class="gloss">${GLOSSARY.map(([t, d]) => `<dt>${esc(t)}</dt><dd>${esc(d)}</dd>`).join("")}</dl></div>
+  <div id="g-faq"><h3 class="gh">Questions people ask</h3>
+    <p><b>Is this my real data?</b> No. It's a simulated warehouse with 15,000 items and two years of orders, so you can see how everything works. Connecting your own data is covered in the README.</p>
+    <p><b>Will it change my orders or stock?</b> No. It only recommends. You approve and do the work.</p>
+    <p><b>Where are my ticks saved?</b> In this browser only. Another device or browser starts fresh.</p>
+    <p><b>Why do some numbers say "—"?</b> There's nothing to show, for example an item with no recent sales has no days of cover.</p>
+    <p><b>Something looks wrong.</b> Click any item to see the math behind its recommendation, or ask the assistant "why" about it.</p></div>
+  <div class="noprint" style="display:flex;gap:8px"><button class="btn" id="g-print">Print this guide</button></div>`;
+}
+function openGuide(anchor) {
+  if (document.querySelector(".sheet[data-guide]")) return;
+  const bg = document.createElement("div"); bg.className = "sheet-bg";
+  const sh = document.createElement("div"); sh.className = "sheet"; sh.dataset.guide = "1"; sh.setAttribute("role", "dialog"); sh.setAttribute("aria-label", "Guide");
+  sh.style.width = "min(640px,100%)";
+  const close = () => { bg.remove(); sh.remove(); removeEventListener("keydown", onKey); $("#guide-btn")?.focus(); };
+  const onKey = e => { if (e.key === "Escape") close(); };
+  bg.addEventListener("click", close); addEventListener("keydown", onKey);
+  sh.innerHTML = `<button class="linkbtn x" aria-label="Close guide">Close</button>` + guideHTML();
+  sh.addEventListener("click", e => { const a = e.target.closest("a[href^='#g-']"); if (a) { e.preventDefault(); sh.querySelector(a.getAttribute("href")).scrollIntoView({behavior: "smooth", block: "start"}); } });
+  sh.querySelector(".x").addEventListener("click", close);
+  sh.querySelector("#g-print").addEventListener("click", () => { document.body.classList.add("printing"); print(); document.body.classList.remove("printing"); });
+  document.body.append(bg, sh); sh.querySelector(".x").focus();
+  if (anchor) sh.querySelector("#" + anchor)?.scrollIntoView();
+}
+document.addEventListener("click", e => { if (e.target.closest("#guide-btn")) openGuide(); });
+addEventListener("keydown", e => { if (e.key === "?" && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) { e.preventDefault(); openGuide(); } });
+function welcome() {
+  if (store.get("welcomed", false)) return "";
+  const step = (no, tab, t, d) => `<li><button data-go="${tab}"><span class="no">${no}</span><b>${t}</b><span class="d">${d}</span></button></li>`;
+  return `<div class="panel welcome" id="welcome"><div class="panel-h"><h2>Welcome. Start here</h2><button class="linkbtn" id="w-hide">Got it, hide this</button></div>
+    <p>PaperTrail watches your orders and stock and tells you what to do next. It only gives advice, so you stay in charge. Work through these four steps each morning (tap one to jump there):</p>
+    <ol class="steps4">${step(1, "today", "Read “Do next”", "The checklist right below. Tick items off as you go.")}${step(2, "orders", "Fix problem orders", "Late, short or stuck orders, each with a suggested fix.")}${step(3, "waves", "Release pick waves", "Give pickers their lists, in walking order.")}${step(4, "inventory", "Approve purchase orders", "See what to buy from each supplier before it runs out.")}</ol>
+    <p style="margin:0"><button class="btn" id="w-guide">Open the full guide</button> <span class="muted" style="margin-left:6px">or press the <b>? Guide</b> button any time. You can also type a question to the assistant.</span></p></div>`;
+}
+
+// ------------------------------------------------------------------ views
+const views = {};
+let current = "today";
+function show(v) {
+  if (v === "ask" && innerWidth >= 1200) v = "today";
+  current = v;
+  document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.v === v));
+  redraws.length = 0;
+  const main = $("#main"); main.innerHTML = ""; const sec = document.createElement("section");
+  sec.className = "view"; sec.id = "view-" + v; main.append(sec);
+  views[v](sec);
+  sec.querySelectorAll("details.how").forEach(d => d.addEventListener("toggle", () => store.set("how:" + d.dataset.k, d.open)));
+  sec.querySelector("#w-hide")?.addEventListener("click", () => { store.set("welcomed", true); sec.querySelector("#welcome").remove(); toast("Hidden. Reopen anytime from ? Guide"); });
+  sec.querySelector("#w-guide")?.addEventListener("click", () => openGuide());
+  if (innerWidth >= 1200 && !$("#dock").firstChild) mountChat($("#dock"));
+  try { history.replaceState(null, "", "#" + v); } catch {}
+  scrollTo({top: 0});
+}
+document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => show(b.dataset.v)));
+window.ptGo = show;
+
+// ---- Today
+views.today = sec => {
+  const b = D.meta.briefing, bd = b.board, ws = D.meta.wave_summary;
+  const done = store.get("actions:" + D.meta.now.slice(0, 10), {});
+  const goto = {Orders: "orders", Inventory: "inventory", Picking: "waves", Slotting: "slotting", People: "waves"};
+  sec.innerHTML = `
+    ${welcome()}
+    ${howto("today", "How to use this page", `<ol><li>The six boxes show where every order is right now, from <b>New</b> (not yet picked) to <b>Shipped</b>. <b>On hold</b> in orange needs a person.</li><li>Work down <b>Do next</b> from the top. Tick each box when finished, and press <b>Open</b> to jump to the right page.</li><li>The numbers below the list show money at risk and how much walking today's plan saves. They're for information, so there's nothing to do.</li></ol>`)}
+    <div class="pipe" aria-label="Order pipeline">
+      ${[["New", bd.by_status.New, "waiting for a wave"], ["Released", bd.by_status.Released, "in a wave"], ["Picking", bd.by_status.Picking, "on the floor"],
+         ["Packed", bd.by_status.Packed, "awaiting carrier"], ["Shipped today", bd.shipped_today, `of ${n(bd.orders_today)} placed today`], ["On hold", bd.by_status["On hold"], "need a person"]]
+        .map(([l, v, s], i) => `<div class="${i === 5 ? "hold" : ""}"><div class="n">${n(v)}</div><div class="l">${l}</div><div class="l">${s}</div></div>`).join("")}
+    </div>
+    <div class="panel">
+      <div class="panel-h"><h2>Do next</h2><span class="muted">${bd.due_today_open} open orders must ship today</span></div>
+      <div class="actions">${b.actions.map((a, i) => `
+        <div class="act ${done[i] ? "done" : ""}" data-i="${i}">
+          <input type="checkbox" id="act-${i}" ${done[i] ? "checked" : ""} aria-label="Mark done">
+          <span class="area">${esc(a.area)}</span>
+          <div class="body"><div class="t">${esc(a.text)}</div><div class="d">${esc(a.detail)}</div></div>
+          <button class="linkbtn go" data-go="${goto[a.area]}">Open</button>
+        </div>`).join("")}</div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="k">Revenue at risk before stock lands</div><div class="v"><span class="hl">${kmoney(b.revenue_at_risk)}</span></div><div class="s">${n(b.inventory.Stockout)} SKUs out, ${n(b.inventory["Reorder now"])} at reorder point</div></div>
+      <div class="stat"><div class="k">Suggested purchase orders</div><div class="v">${kmoney(b.reorder_value)}</div><div class="s">rounded to case packs, by supplier</div></div>
+      <div class="stat"><div class="k">Tied up in overstock</div><div class="v">${kmoney(b.overstock_value)}</div><div class="s">${n(b.inventory.Overstock)} SKUs, mostly back-to-school leftovers</div></div>
+      <div class="stat"><div class="k">Walking saved by today's waves</div><div class="v">${ws.walking_saved_pct}%</div><div class="s">${ws.distance_km} km vs ${ws.single_order_distance_km} km one order at a time</div></div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><div class="panel-h"><h3>Orders per day, last 13 weeks</h3><span class="muted">${n(D.meta.daily_orders.counts.slice(-8, -1).reduce((a, c) => a + c, 0))} last 7 full days</span></div><div id="c-daily"></div></div>
+      <div class="panel"><div class="panel-h"><h3>Pickers needed, next 5 shipping days</h3></div>
+        ${legend([["Batch + zone picking", css("--accent")], ["One order at a time", css("--ink-3")]])}<div id="c-labor"></div>
+        <p class="note">Monday carries the weekend's orders. Based on the forecast and a 7-hour picking day.</p></div>
+    </div>`;
+  sec.querySelectorAll(".act input").forEach(cb => cb.addEventListener("change", () => {
+    const i = cb.closest(".act").dataset.i; done[i] = cb.checked; cb.closest(".act").classList.toggle("done", cb.checked);
+    store.set("actions:" + D.meta.now.slice(0, 10), done);
+  }));
+  sec.querySelectorAll("[data-go]").forEach(x => x.addEventListener("click", () => show(x.dataset.go)));
+  const draw = () => {
+    const d = D.meta.daily_orders;
+    chart($("#c-daily"), {labels: d.dates.slice(0, -1), series: [{name: "Orders", values: d.counts.slice(0, -1), color: css("--accent"), area: true, end: true}], h: 200, fmtX: fmtShort, yLabel: "Orders per day"});
+    const L = D.meta.labor;
+    chart($("#c-labor"), {labels: L.map(x => x.date), bars: true, h: 200, fmtX: fmtDay, yLabel: "Pickers needed",
+      series: [{name: "Batch + zone", values: L.map(x => x.pickers_needed), color: css("--accent")}, {name: "One order at a time", values: L.map(x => x.pickers_needed_single_order), color: css("--ink-3"), opacity: .55}]});
+  };
+  draw(); redraws.push(draw);
+};
+
+// ---- Orders
+views.orders = sec => {
+  const ex = D.meta.exceptions, types = ["Late", "At risk", "Short", "Stuck", "On hold"];
+  let filt = null;
+  sec.innerHTML = `
+    ${howto("orders", "How to use this page", `<ol><li>Each row is an order that needs attention. The <b>coloured bar</b> on the left shows urgency: red is most urgent. They're sorted so the top row is first.</li><li>Read <b>What's wrong</b>, then do what <b>Do this</b> says. Click a row to see every line in the order and which ones are short.</li><li>Use the buttons to show just one kind of problem, or type an order number like <span class="mono">SO-1546575</span> in the box and press Enter.</li></ol><p class="note"><b>Late</b> = past its ship-by date · <b>At risk</b> = won't make today's truck at this pace · <b>Short</b> = not enough stock for every line · <b>Stuck</b> = too long in one step · <b>On hold</b> = waiting for a person.</p>`)}
+    <div class="panel">
+      <div class="panel-h"><h2>Order exceptions</h2><span class="muted">${ex.length} open · sorted by urgency</span></div>
+      <div class="filters" id="ex-f" style="margin-bottom:12px">
+        <button class="fchip" aria-pressed="true" data-t="">All<span class="c">${ex.length}</span></button>
+        ${types.map(t => `<button class="fchip" aria-pressed="false" data-t="${t}">${t}<span class="c">${ex.filter(e => e.type === t).length}</span></button>`).join("")}
+        <span style="flex:1"></span>
+        <input type="search" id="o-q" placeholder="Find an order, e.g. SO-1546575" aria-label="Find an order">
+      </div>
+      <div id="o-detail"></div>
+      <div class="tbl-wrap"><table><thead><tr><th>Order</th><th>Issue</th><th>What's wrong</th><th>Do this</th><th>Ship by</th></tr></thead><tbody id="ex-b"></tbody></table></div>
+    </div>`;
+  const body = $("#ex-b", sec);
+  const render = () => {
+    const rows = ex.filter(e => !filt || e.type === filt);
+    body.innerHTML = rows.map(e => `<tr class="click sev sev-${e.severity}" data-o="${e.order_id}">
+      <td class="mono">${e.order_id}<div class="muted" style="font-family:var(--f-body)">${esc(e.ship_method)} · ${esc(e.status)}</div></td>
+      <td>${pill(e.type, EX_PILL[e.type])}</td><td>${esc(e.detail)}</td><td>${esc(e.action)}</td><td class="nw">${fmtDay(e.ship_by)}</td></tr>`).join("");
+  };
+  render();
+  sec.querySelectorAll("#ex-f .fchip").forEach(b => b.addEventListener("click", () => {
+    filt = b.dataset.t || null; sec.querySelectorAll("#ex-f .fchip").forEach(x => x.setAttribute("aria-pressed", x === b)); render();
+  }));
+  body.addEventListener("click", ev => { const tr = ev.target.closest("tr[data-o]"); if (tr) orderDetail(tr.dataset.o); });
+  $("#o-q", sec).addEventListener("keydown", ev => { if (ev.key === "Enter") orderDetail(ev.target.value); });
+};
+async function orderDetail(id) {
+  const box = $("#o-detail"); if (!box) return;
+  const m = String(id).match(/(\d{7})/); if (!m) { box.innerHTML = `<p class="note">Order ids look like SO-1546575.</p>`; return; }
+  const oid = "SO-" + m[1], o = (await loadOrders()).get(oid);
+  if (!o) { box.innerHTML = `<p class="note">${esc(oid)} isn't in this week's orders. Earlier orders have all shipped.</p>`; return; }
+  const ex = D.meta.exceptions.filter(e => e.order_id === oid);
+  box.innerHTML = `<div class="panel" style="margin-bottom:12px;background:var(--sheet-2)">
+    <div class="panel-h"><h3 class="mono">${oid}</h3><span>${pill(o.st, o.st === "Shipped" ? "p-good" : o.st === "On hold" ? "p-info" : "")}</span></div>
+    <p class="soft" style="margin:0 0 10px">${esc(o.ch)} · ${esc(o.sm)} to ${esc(o.state)} · placed ${new Date(o.c).toLocaleString("en-US", {weekday: "short", hour: "numeric", minute: "2-digit"})} · ship by ${fmtDay(o.by)}${o.pk ? " · picker " + esc(o.pk) : ""}${o.w ? " · wave " + esc(o.w) : ""}${o.hold ? " · hold: " + esc(o.hold) : ""}</p>
+    <div class="tbl-wrap"><table><thead><tr><th>Slot</th><th>SKU</th><th>Item</th><th class="r">Qty</th><th class="r">Allocated</th></tr></thead><tbody>
+    ${o.l.map(([sku, q, a]) => { const i = skuIdx(sku); return `<tr class="click" data-sku="${i}"><td>${bin(D.skus.loc[i])}</td><td class="mono">${sku}</td><td>${esc(D.skus.name[i])}</td><td class="r">${q}</td><td class="r" style="${a < q ? "color:var(--crit);font-weight:700" : ""}">${a}</td></tr>`; }).join("")}
+    </tbody></table></div>
+    ${ex.map(e => `<p style="margin:10px 0 0">${pill(e.type, EX_PILL[e.type])} ${esc(e.detail)} <b>→ ${esc(e.action)}</b></p>`).join("")}
+  </div>`;
+  box.querySelectorAll("tr[data-sku]").forEach(tr => tr.addEventListener("click", () => skuSheet(+tr.dataset.sku)));
+  box.scrollIntoView({behavior: "smooth", block: "nearest"});
+}
+
+// ---- Waves
+views.waves = sec => {
+  const W = D.meta.waves, s = D.meta.wave_summary;
+  let wi = 0, zi = 0, floor = store.get("floor", false);
+  sec.innerHTML = `
+    ${howto("waves", "How to use this page", `<div class="cols"><div><p><b>Managers</b></p><ol><li>A <b>wave</b> is a batch of up to 50 orders picked together. The most urgent wave is first.</li><li>Tap a wave, then a <b>zone</b> tab. Each zone has its own list, so a picker stays in one area.</li><li>Press <b>Copy pick list</b> to paste it into a message or a print.</li></ol></div><div><p><b>Pickers</b></p><ol><li>Tap your wave and zone, then switch on <b>Floor view</b> for big type.</li><li>Walk the list from top to bottom and tick each stop. It's already in walking order.</li><li>Take the <b>total</b> shown (× number). Sort it into order totes at the pack station. The small order numbers show where it goes.</li></ol></div></div>`)}
+    <div class="stats">
+      <div class="stat"><div class="k">Waves ready to release</div><div class="v">${s.waves}</div><div class="s">${n(s.orders)} orders · ${n(s.lines)} lines</div></div>
+      <div class="stat"><div class="k">Walking with batch + zone picking</div><div class="v"><span class="hl">${s.distance_km} km</span></div><div class="s">vs ${s.single_order_distance_km} km one order at a time</div></div>
+      <div class="stat"><div class="k">Picker time saved on these waves</div><div class="v">${s.walking_hours_saved} h</div><div class="s">${s.walking_saved_pct}% less walking</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-h"><h2>Waves</h2><span class="muted">Ordered by ship-by date, then Overnight → Expedited → Ground. Max 50 orders each.</span></div>
+      <div class="waves" id="w-list"></div>
+    </div>
+    <div class="panel" id="w-detail"></div>
+    <div class="grid2">
+      <div class="panel"><div class="panel-h"><h3>Picker scorecard, last 4 weeks</h3></div><div class="tbl-wrap"><table><thead><tr><th>Picker</th><th class="r">Lines/hr</th><th class="r">Mispicks</th><th>Note</th></tr></thead><tbody>
+        ${D.meta.pickers.map(p => `<tr><td>${esc(p.picker)}</td><td class="r">${n1(p.lines_per_hour)}</td><td class="r">${p.mispick_rate_pct.toFixed(2)}%</td><td>${p.flag ? pill(p.flag, p.flag.startsWith("Top") ? "p-good" : "p-warn") : ""}</td></tr>`).join("")}
+      </tbody></table></div><p class="note">Pace and accuracy are compared with the team median. Pair a flagged picker with a mentor for a shift before anything formal.</p></div>
+      <div class="panel"><div class="panel-h"><h3>Staffing plan</h3></div><div class="tbl-wrap"><table><thead><tr><th>Day</th><th class="r">Orders</th><th class="r">Lines</th><th class="r">Pickers (batch)</th><th class="r">Pickers (single)</th></tr></thead><tbody>
+        ${D.meta.labor.map(d => `<tr><td>${fmtDay(d.date)}</td><td class="r">${n(d.orders)}</td><td class="r">${n(d.lines)}</td><td class="r"><b>${d.pickers_needed}</b></td><td class="r">${d.pickers_needed_single_order}</td></tr>`).join("")}
+      </tbody></table></div></div>
+    </div>`;
+  const doneKey = (w, z) => `pick:${W[w].wave_id}:${W[w].pick_lists[z].zone}`;
+  const progress = w => { let t = 0, d = 0; W[w].pick_lists.forEach((p, z) => { const ck = store.get(doneKey(w, z), {}); t += p.stops.length; d += Object.values(ck).filter(Boolean).length; }); return t ? d / t : 0; };
+  const list = () => $("#w-list", sec).innerHTML = W.map((w, i) => `
+    <button class="wave" aria-pressed="${i === wi}" data-i="${i}">
+      <span class="id">${w.wave_id}</span>
+      <span class="m">${w.orders} orders · ${w.lines} lines · ~${Math.round(w.est_minutes)} min</span>
+      <span class="m">${w.overnight ? `<b>${w.overnight} overnight</b> · ` : ""}${w.expedited ? w.expedited + " expedited · " : ""}${w.pick_lists.length} zones</span>
+      <span class="bar"><i style="width:${Math.round(progress(i) * 100)}%"></i></span>
+    </button>`).join("");
+  const detail = () => {
+    const w = W[wi], p = w.pick_lists[zi], ck = store.get(doneKey(wi, zi), {});
+    const doneN = p.stops.filter(st => ck[st.seq]).length;
+    $("#w-detail", sec).innerHTML = `
+      <div class="panel-h"><h2 class="mono">${w.wave_id}</h2>
+        <div class="filters"><label class="fchip" style="cursor:pointer" title="Bigger type and bigger tick boxes for use on the warehouse floor"><input type="checkbox" id="floor" ${floor ? "checked" : ""} style="margin:0 6px 0 0"> Floor view</label>
+        <button class="linkbtn" id="w-copy">Copy pick list</button></div></div>
+      <div class="zone-tabs" role="tablist">${w.pick_lists.map((q, i) => `<button class="fchip" aria-pressed="${i === zi}" data-z="${i}">Zone ${q.zone} · ${esc(q.zone_name)}<span class="c">${q.stops.length}</span></button>`).join("")}</div>
+      <p class="soft" style="margin:12px 0 4px">${p.stops.length} stops · ${n(p.units)} units for ${p.lines} order lines · walk ${n(p.distance_m)} m · about ${Math.round(p.est_minutes)} min. Pick the total, then sort into order totes at pack-out. <b>${doneN}/${p.stops.length} done.</b></p>
+      <div class="route" id="w-route"></div>
+      <div class="stops ${floor ? "floor" : ""}">${p.stops.map(st => `
+        <label class="stop ${ck[st.seq] ? "done" : ""}"><input type="checkbox" data-seq="${st.seq}" ${ck[st.seq] ? "checked" : ""}>
+          ${bin(st.location, true)}
+          <span class="nm">${esc(st.name)} <span class="mono muted">${st.sku}</span><div class="od">${st.n_orders > 1 ? `${st.n_orders} orders: ` : ""}${st.orders.join(", ")}${st.n_orders > st.orders.length ? "…" : ""}</div></span>
+          <span class="q">× ${st.qty}</span></label>`).join("")}</div>`;
+    routeSVG($("#w-route", sec), p);
+    $("#w-detail", sec).querySelectorAll("[data-z]").forEach(b => b.addEventListener("click", () => { zi = +b.dataset.z; detail(); }));
+    $("#floor", sec).addEventListener("change", e => { floor = e.target.checked; store.set("floor", floor); detail(); });
+    $("#w-copy", sec).addEventListener("click", () => copy(`${w.wave_id} — Zone ${p.zone}\n` + p.stops.map(st => `${st.seq}. ${st.location}  ${st.sku}  x${st.qty}  ${st.name}`).join("\n")));
+    $("#w-detail", sec).querySelectorAll("input[data-seq]").forEach(cb => cb.addEventListener("change", () => {
+      const c = store.get(doneKey(wi, zi), {}); c[cb.dataset.seq] = cb.checked; store.set(doneKey(wi, zi), c);
+      cb.closest(".stop").classList.toggle("done", cb.checked); list();
+      $("#w-list", sec).querySelectorAll(".wave").forEach(b => b.addEventListener("click", pickWave));
+    }));
+  };
+  const pickWave = e => { wi = +e.currentTarget.dataset.i; zi = 0; list(); $("#w-list", sec).querySelectorAll(".wave").forEach(b => b.addEventListener("click", pickWave)); detail(); };
+  list(); $("#w-list", sec).querySelectorAll(".wave").forEach(b => b.addEventListener("click", pickWave)); detail();
+  redraws.push(() => routeSVG($("#w-route", sec), W[wi].pick_lists[zi]));
+};
+function routeSVG(el, p) {
+  if (!el) return;
+  const d = D.meta.dims, zinfo = D.meta.locations_by_zone.find(z => z.zone === p.zone);
+  const A = zinfo.aisles, depth = 2 + d.bays * d.bay_m + 1;
+  const W = Math.max(300, el.clientWidth || 600), pad = 18, sx = (W - pad * 2) / Math.max(1, A * d.aisle_m), H = Math.round(depth * Math.min(sx, 4.2) + pad * 2 + 14), sy = (H - pad * 2 - 14) / depth;
+  const X = (a, side) => pad + ((a - 1) * d.aisle_m + d.aisle_m / 2 + (side === "L" ? -0.55 : 0.55)) * sx;
+  const Y = bay => pad + (2 + bay * d.bay_m) * sy;
+  const parse = loc => { const [, a, sb] = loc.split("-"); return {a: +a, side: sb[0], bay: +sb.slice(1)}; };
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Walking route for zone ${p.zone}">`;
+  for (let a = 1; a <= A; a++) {
+    const cx = pad + ((a - 1) * d.aisle_m + d.aisle_m / 2) * sx;
+    svg += `<rect x="${cx - 0.95 * sx - 3}" y="${Y(1) - 3}" width="${Math.max(2, 0.6 * sx)}" height="${Y(d.bays) - Y(1) + 6}" fill="var(--rule-2)"/><rect x="${cx + 0.35 * sx + 3}" y="${Y(1) - 3}" width="${Math.max(2, 0.6 * sx)}" height="${Y(d.bays) - Y(1) + 6}" fill="var(--rule-2)"/>`;
+    if (A <= 20 || a % 2 === 1) svg += `<text x="${cx}" y="${H - 4}" text-anchor="middle" font-size="10" fill="var(--ink-3)">${a}</text>`;
+  }
+  const stops = p.stops.map(s => ({...s, ...parse(s.location)}));
+  const aisles = [...new Set(stops.map(s => s.a))];
+  const pts = [], front = pad + 1 * sy, back = pad + (depth - 0.5) * sy;
+  aisles.forEach((a, i) => {
+    const cx = pad + ((a - 1) * d.aisle_m + d.aisle_m / 2) * sx;
+    const grp = stops.filter(s => s.a === a);
+    const lastOdd = i === aisles.length - 1 && aisles.length % 2 === 1, up = i % 2 === 0;
+    const start = up ? front : back;
+    pts.push([cx, start]);
+    const ys = grp.map(s => Y(s.bay)).sort((u, v) => up || lastOdd ? u - v : v - u);
+    ys.forEach(yy => pts.push([cx, yy]));
+    pts.push([cx, lastOdd ? front : (up ? back : front)]);
+  });
+  svg += `<polyline points="${pts.map(q => q.map(v => v.toFixed(1)).join(",")).join(" ")}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" opacity=".85"/>`;
+  stops.forEach(s => svg += `<circle cx="${X(s.a, s.side)}" cy="${Y(s.bay)}" r="4" fill="var(--s-ly)" stroke="var(--sheet)" stroke-width="1.5"><title>${s.seq}. ${s.location} × ${s.qty}</title></circle>`);
+  svg += `<text x="${pad}" y="${pad - 6}" font-size="10" fill="var(--ink-3)">FRONT · pack station side</text></svg>`;
+  el.innerHTML = svg + `<div class="legend" style="margin-top:4px"><span><i style="border-color:${css("--accent")}"></i>Walking path (serpentine)</span><span><i style="border-color:${css("--s-ly")};border-top-width:6px;width:6px;border-radius:50%"></i>Pick stop</span></div>`;
+}
+
+// ---- Inventory
+views.inventory = sec => {
+  const k = D.skus, N = k.sku.length, st = k.statuses;
+  const counts = st.map((_, j) => k.st.filter(x => x === j).length);
+  let f = {st: store.get("inv:st", 1), cat: -1, sup: -1, q: ""}, sort = {key: "rar", dir: -1}, lim = 100;
+  sec.innerHTML = `
+    ${howto("inventory", "How to use this page", `<ol><li>Pick a status button. <b>Reorder now</b> and <b>Stockout</b> are the ones to act on. The list is sorted with the most sales at risk first.</li><li>With one of those selected, a <b>purchase plan</b> appears, grouped by supplier. Press <b>Copy as CSV</b> to send it to buying.</li><li>Click any row to open the item: its sales history, forecast and the exact math behind the suggested order.</li><li>Search by name (like <i>gel pen navy</i>) or SKU, or filter by category or supplier.</li></ol><p class="note"><b>Available</b> = on hand minus what's reserved for open orders · <b>On order</b> = bought, not arrived · <b>Reorder pt</b> = buy when Available + On order falls to this · <b>Days cover</b> = how long stock lasts at the forecast rate · <b>Order qty</b> = suggested buy in full case packs · <b>Class A/B/C</b> = best, middle and slow sellers.</p>`)}
+    <div class="panel">
+      <div class="panel-h"><h2>Stock health</h2><span class="muted">${n(N)} SKUs · reorder points use each SKU's lead time and a service level by class (A 95%, B 90%, C 85%)</span></div>
+      <div class="filters" id="i-st">${st.map((s, j) => `<button class="fchip" data-j="${j}" aria-pressed="${f.st === j}">${s}<span class="c">${n(counts[j])}</span></button>`).join("")}<button class="fchip" data-j="-1" aria-pressed="${f.st === -1}">All<span class="c">${n(N)}</span></button></div>
+      <div class="filters" style="margin-top:10px">
+        <input type="search" id="i-q" placeholder="Search SKU or name (e.g. gel pen navy)" aria-label="Search SKUs">
+        <select id="i-cat" aria-label="Category"><option value="-1">All categories</option>${k.cats.map((c, j) => `<option value="${j}">${esc(c)}</option>`).join("")}</select>
+        <select id="i-sup" aria-label="Supplier"><option value="-1">All suppliers</option>${k.suppliers.map((c, j) => `<option value="${j}">${esc(c)}</option>`).join("")}</select>
+        <span style="flex:1"></span><button class="btn ghost" id="i-csv">Copy as CSV</button>
+      </div>
+    </div>
+    <div id="i-po"></div>
+    <div class="tbl-wrap"><table><thead><tr id="i-h"></tr></thead><tbody id="i-b"></tbody></table></div>
+    <div id="i-more" style="text-align:center"></div>`;
+  const cols = [["sku", "SKU"], ["name", "Item"], ["st", "Status"], ["abc", "Class"], ["av", "Available", 1], ["oo", "On order", 1], ["rop", "Reorder pt", 1], ["cov", "Days cover", 1], ["sq", "Order qty", 1], ["rar", "Revenue at risk", 1], ["loc", "Slot"]];
+  const rows = () => {
+    const q = f.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const out = [];
+    for (let i = 0; i < N; i++) {
+      if (f.st >= 0 && k.st[i] !== f.st) continue;
+      if (f.cat >= 0 && k.cat[i] !== f.cat) continue;
+      if (f.sup >= 0 && k.sup[i] !== f.sup) continue;
+      if (q.length) { const h = (k.sku[i] + " " + k.name[i]).toLowerCase(); if (!q.every(w => h.includes(w))) continue; }
+      out.push(i);
+    }
+    const key = sort.key, src = key === "abc" ? null : k[key];
+    out.sort((a, b) => {
+      let va = key === "abc" ? k.abc[a] : src[a], vb = key === "abc" ? k.abc[b] : src[b];
+      if (va == null) va = sort.dir < 0 ? -Infinity : Infinity; if (vb == null) vb = sort.dir < 0 ? -Infinity : Infinity;
+      return (va > vb ? 1 : va < vb ? -1 : 0) * sort.dir || k.ppw[b] - k.ppw[a];
+    });
+    return out;
+  };
+  const render = () => {
+    const r = rows();
+    $("#i-h", sec).innerHTML = cols.map(([key, label, right]) => `<th class="${right ? "r" : ""}"><button data-k="${key}" ${sort.key === key ? `aria-sort="${sort.dir > 0 ? "ascending" : "descending"}"` : ""}>${label}${sort.key === key ? (sort.dir > 0 ? " ↑" : " ↓") : ""}</button></th>`).join("");
+    $("#i-b", sec).innerHTML = r.slice(0, lim).map(i => `<tr class="click" data-i="${i}">
+      <td class="mono">${k.sku[i]}</td><td style="min-width:220px">${esc(k.name[i])}</td><td>${pill(st[k.st[i]], STATUS_PILL[st[k.st[i]]])}</td>
+      <td><span class="abc ${k.abc[i]}">${k.abc[i]}</span></td><td class="r">${n(k.av[i])}</td><td class="r">${k.oo[i] ? n(k.oo[i]) : "—"}</td>
+      <td class="r">${n(k.rop[i])}</td><td class="r">${k.cov[i] == null ? "—" : n(k.cov[i])}</td><td class="r">${k.sq[i] ? "<b>" + n(k.sq[i]) + "</b>" : "—"}</td>
+      <td class="r">${k.rar[i] ? money(k.rar[i]) : "—"}</td><td>${bin(k.loc[i])}</td></tr>`).join("") || `<tr><td colspan="11" class="muted">No SKUs match these filters.</td></tr>`;
+    $("#i-more", sec).innerHTML = r.length > lim ? `<button class="linkbtn" id="i-mb">Show more (${n(r.length - lim)} left)</button>` : `<span class="muted">${n(r.length)} SKUs</span>`;
+    $("#i-mb", sec)?.addEventListener("click", () => { lim += 200; render(); });
+    $("#i-h", sec).querySelectorAll("button").forEach(b => b.addEventListener("click", () => { sort = {key: b.dataset.k, dir: sort.key === b.dataset.k ? -sort.dir : -1}; render(); }));
+    // purchase plan for reorder-ish views
+    const po = r.filter(i => k.sq[i] > 0 && (k.st[i] === 0 || k.st[i] === 1));
+    if (po.length && (f.st === 0 || f.st === 1)) {
+      const bySup = {}; po.forEach(i => { const s = k.suppliers[k.sup[i]]; (bySup[s] ??= {skus: 0, units: 0, value: 0, lt: k.lt[i]}); bySup[s].skus++; bySup[s].units += k.sq[i]; bySup[s].value += k.sq[i] * k.cost[i]; });
+      $("#i-po", sec).innerHTML = `<div class="panel"><div class="panel-h"><h3>Purchase plan for this view</h3><span class="muted">${n(po.length)} SKUs · ${money(po.reduce((a, i) => a + k.sq[i] * k.cost[i], 0))} at cost</span></div>
+        <div class="tbl-wrap"><table><thead><tr><th>Supplier</th><th class="r">SKUs</th><th class="r">Units</th><th class="r">Value</th></tr></thead><tbody>
+        ${Object.entries(bySup).sort((a, b) => b[1].value - a[1].value).map(([s, v]) => `<tr><td>${esc(s)}</td><td class="r">${n(v.skus)}</td><td class="r">${n(v.units)}</td><td class="r">${money(v.value)}</td></tr>`).join("")}
+        </tbody></table></div></div>`;
+    } else $("#i-po", sec).innerHTML = "";
+    return r;
+  };
+  render();
+  $("#i-st", sec).querySelectorAll(".fchip").forEach(b => b.addEventListener("click", () => {
+    f.st = +b.dataset.j; store.set("inv:st", f.st); lim = 100;
+    sort = f.st === 4 ? {key: "ovv", dir: -1} : f.st === 5 ? {key: "s52", dir: 1} : {key: "rar", dir: -1};
+    $("#i-st", sec).querySelectorAll(".fchip").forEach(x => x.setAttribute("aria-pressed", x === b)); render();
+  }));
+  let qt; $("#i-q", sec).addEventListener("input", e => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value; lim = 100; render(); }, 150); });
+  $("#i-cat", sec).addEventListener("change", e => { f.cat = +e.target.value; lim = 100; render(); });
+  $("#i-sup", sec).addEventListener("change", e => { f.sup = +e.target.value; lim = 100; render(); });
+  $("#i-b", sec).addEventListener("click", ev => { const tr = ev.target.closest("tr[data-i]"); if (tr) skuSheet(+tr.dataset.i); });
+  $("#i-csv", sec).addEventListener("click", () => {
+    const r = rows(); copy("sku,name,status,supplier,available,on_order,reorder_point,suggested_qty,unit_cost\n" +
+      r.slice(0, 5000).map(i => [k.sku[i], `"${k.name[i]}"`, st[k.st[i]], k.suppliers[k.sup[i]], k.av[i], k.oo[i], k.rop[i], k.sq[i], k.cost[i]].join(",")).join("\n"));
+  });
+};
+
+async function skuSheet(i) {
+  const s = S(i);
+  const bg = document.createElement("div"); bg.className = "sheet-bg";
+  const sh = document.createElement("div"); sh.className = "sheet"; sh.setAttribute("role", "dialog"); sh.setAttribute("aria-label", s.sku);
+  const close = () => { bg.remove(); sh.remove(); removeEventListener("keydown", onKey); };
+  const onKey = e => { if (e.key === "Escape") close(); };
+  bg.addEventListener("click", close); addEventListener("keydown", onKey);
+  const lt = s.lead_time_days, z = {A: 1.65, B: 1.28, C: 1.04}[s.abc];
+  sh.innerHTML = `<button class="linkbtn x" aria-label="Close">Close</button>
+    <div><div class="eyebrow">${esc(s.category)} · ${esc(s.supplier)}</div><h2 style="margin-top:6px;padding-right:70px">${esc(s.name)}</h2>
+      <p style="margin:8px 0 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span class="mono">${s.sku}</span>${pill(s.status, STATUS_PILL[s.status])}<span class="abc ${s.abc}">${s.abc}</span>${bin(s.location)}</p></div>
+    <dl class="kv">
+      <div><dt>On hand</dt><dd>${n(s.on_hand)}</dd></div><div><dt>Available</dt><dd>${n(s.available)}</dd></div>
+      <div><dt>On order</dt><dd>${s.on_order ? n(s.on_order) + (s.next_po_eta ? " · " + fmtShort(s.next_po_eta) : "") : "—"}</dd></div>
+      <div><dt>Days of cover</dt><dd>${s.days_of_cover == null ? "—" : n(s.days_of_cover)}</dd></div>
+      <div><dt>Sold, last 4 weeks</dt><dd>${n(s.sold_4wk)}</dd></div><div><dt>Forecast, next 4 weeks</dt><dd>${n(s.fcst_4wk)}</dd></div>
+      <div><dt>Picks per week</dt><dd>${n1(s.picks_per_week)}</dd></div><div><dt>Price / cost</dt><dd>$${s.unit_price.toFixed(2)} / $${s.unit_cost.toFixed(2)}</dd></div>
+    </dl>
+    <div><h3 style="margin-bottom:6px">Weekly units</h3>${legend([["Sold", css("--accent")], ["Forecast", css("--accent"), true], ["Same week last year", css("--s-ly")]])}<div id="sk-c" class="chart"><p class="muted">Loading history…</p></div></div>
+    <div><h3 style="margin-bottom:6px">Why this recommendation</h3><div class="math">
+      safety stock = z ${z} × σ<sub>day</sub> × √${lt} days  = <b>${n(s.safety_stock)}</b><br>
+      reorder point = ${s.daily_demand}/day × ${lt} days + ${n(s.safety_stock)} = <b>${n(s.reorder_point)}</b><br>
+      position = available ${n(s.available)} + on order ${n(s.on_order)} = <b>${n(s.available + s.on_order)}</b><br>
+      ${s.suggested_qty ? `order up to ${s.daily_demand}/day × (${lt} + 7 review) + safety, rounded to case pack ${s.case_pack} → <b>order ${n(s.suggested_qty)}</b>` : "position is above the reorder point → <b>no purchase this week</b>"}
+    </div>${s.projected_stockout && s.status !== "Overstock" ? `<p class="note">At the forecast rate, available stock runs out around <b>${fmtDay(s.projected_stockout)}</b>.</p>` : ""}</div>`;
+  sh.querySelector(".x").addEventListener("click", close);
+  document.body.append(bg, sh); sh.querySelector(".x").focus();
+  const sales = await loadSales();
+  const h = sales.h[i].split(",").map(Number), fc = sales.f[i].split(",").map(Number);
+  const labels = [...sales.weeks, ...sales.future];
+  const sold = [...h, ...new Array(fc.length).fill(null)];
+  const fcs = [...new Array(h.length - 1).fill(null), h[h.length - 1], ...fc];
+  const lyv = [...new Array(h.length).fill(null), ...h.slice(0, fc.length)];
+  const draw = () => chart(sh.querySelector("#sk-c"), {labels, h: 190, fmtX: fmtShort, splitAt: h.length, yLabel: "Weekly units",
+    series: [{name: "Sold", values: sold, color: css("--accent")}, {name: "Forecast", values: fcs, color: css("--accent"), dash: true, end: true}, {name: "Same week last year", values: lyv, color: css("--s-ly")}]});
+  draw();
+}
+
+// ---- Slotting
+views.slotting = sec => {
+  const S2 = D.meta.slotting, heat = D.meta.zone_heat, f = D.meta.batch_walk_factor;
+  const done = store.get("slot:done", {});
+  let zone = "";
+  sec.innerHTML = `
+    ${howto("slotting", "How to use this page", `<ol><li>Fast-selling items should sit close to the pack station so pickers walk less. The bars show how close that is today (shaded) against where it could be (black line).</li><li>Below, the <b>Swap list</b> is ranked by hours saved. Start at #1. Each row says which item to move, <b>from → to</b> which slot, and which item trades places with it.</li><li>Do swaps in a quiet period, update your system's locations, and tick <b>Done</b> so you can see progress.</li></ol><p class="note">A few swaps a week is plenty. The first 20 save the most.</p>`)}
+    <div class="panel">
+      <div class="panel-h"><h2>How well each zone is slotted</h2><span class="muted">Share of pick visits that land in the closest 20% of slots</span></div>
+      <div class="heat">${heat.map(h => `<div class="row"><span><b>${h.zone}</b> ${esc(h.zone_name)}</span>
+        <span class="track" title="Now ${h.volume_in_prime_pct}% · ideal ${h.ideal_volume_in_prime_pct}%"><span class="now" style="width:${h.volume_in_prime_pct}%"></span><span class="ideal" style="left:${h.ideal_volume_in_prime_pct}%"></span></span>
+        <span class="num">${h.volume_in_prime_pct}% <span class="muted">/ ${h.ideal_volume_in_prime_pct}%</span></span></div>`).join("")}</div>
+      <div class="legend" style="margin-top:12px"><span><i style="border-color:${css("--warn")};border-top-width:8px"></i>Today</span><span><i style="border-color:${css("--ink")};width:2px;height:12px;border-top:0;border-left:2px solid"></i>If fast movers sat up front</span></div>
+      <p class="note">Slots were filled as SKUs arrived, so fast movers are scattered. Velocity uses the next six weeks of forecast pick lines, so holiday items move forward before the rush.</p>
+    </div>
+    <div class="panel">
+      <div class="panel-h"><h2>Swap list</h2><span class="muted" id="sl-sum"></span></div>
+      <div class="filters" id="sl-z" style="margin-bottom:12px"><button class="fchip" aria-pressed="true" data-z="">All zones</button>${heat.map(h => `<button class="fchip" aria-pressed="false" data-z="${h.zone}">Zone ${h.zone}</button>`).join("")}</div>
+      <div class="tbl-wrap"><table><thead><tr><th>Done</th><th class="r">#</th><th>Move this fast mover</th><th>From → to</th><th>Swap with</th><th class="r">Picks/wk</th><th class="r">Hours/wk saved</th></tr></thead><tbody id="sl-b"></tbody></table></div>
+      <p class="note">Each row is one swap: two items trade slots. Savings are scaled to batch picking (×${f.toFixed(2)} of a single-order walk), so they are conservative. ${n(D.meta.slotting_total_moves)} swaps found in total; the top 300 are listed.</p>
+    </div>`;
+  const render = () => {
+    const rows = S2.filter(r => !zone || r.zone === zone);
+    const rem = rows.filter(r => !done[r.sku]), top20 = rows.slice(0, 20).reduce((a, r) => a + r.hours_saved_per_week_batched, 0);
+    $("#sl-sum", sec).textContent = `Top 20 save ~${top20.toFixed(1)} picker-hours a week · ${rows.length - rem.length} done`;
+    $("#sl-b", sec).innerHTML = rows.slice(0, 120).map(r => `<tr class="${done[r.sku] ? "muted" : ""}">
+      <td><input type="checkbox" data-s="${r.sku}" ${done[r.sku] ? "checked" : ""} aria-label="Mark swap ${r.rank} done"></td><td class="r">${r.rank}</td>
+      <td style="min-width:200px"><span class="mono">${r.sku}</span> ${esc(r.name)}</td>
+      <td style="white-space:nowrap">${bin(r.from_location)} → ${bin(r.to_location)}</td>
+      <td style="min-width:160px">${r.swap_sku ? `<span class="mono">${r.swap_sku}</span> <span class="muted">${n1(r.swap_picks_per_week)}/wk</span>` : `<span class="muted">empty slot</span>`}</td>
+      <td class="r">${n1(r.picks_per_week)}</td><td class="r">${r.hours_saved_per_week_batched.toFixed(2)}</td></tr>`).join("");
+    $("#sl-b", sec).querySelectorAll("input[data-s]").forEach(cb => cb.addEventListener("change", () => { done[cb.dataset.s] = cb.checked; store.set("slot:done", done); render(); }));
+  };
+  render();
+  $("#sl-z", sec).querySelectorAll(".fchip").forEach(b => b.addEventListener("click", () => { zone = b.dataset.z; $("#sl-z", sec).querySelectorAll(".fchip").forEach(x => x.setAttribute("aria-pressed", x === b)); render(); }));
+};
+
+// ---- Forecast
+views.forecast = sec => {
+  const C = D.meta.categories, bt = D.meta.backtest;
+  let ci = -1;
+  sec.innerHTML = `
+    ${howto("forecast", "How to use this page", `<ol><li>Pick a category (or leave it on all). The <b>solid green</b> line is this year, the <b>dashed green</b> line is the forecast, and <b>violet</b> is the same weeks last year.</li><li>Read the sentence under the chart: it says how many units to expect over the next 4 weeks. Use it to size purchase orders and staffing.</li><li>Check <b>How accurate is it?</b>. Trust category totals. A single slow item can be off in any one week, so its safety stock covers that.</li></ol>`)}
+    <div class="panel">
+      <div class="panel-h"><h2>Demand forecast</h2><span class="muted">Weekly units, last 52 weeks and the next 8</span></div>
+      <div class="filters" id="f-c" style="margin-bottom:12px"><button class="fchip" aria-pressed="true" data-c="-1">All categories</button>${C.map((c, i) => `<button class="fchip" aria-pressed="false" data-c="${i}">${esc(c.category)}</button>`).join("")}</div>
+      ${legend([["This year", css("--accent")], ["Forecast", css("--accent"), true], ["Last year", css("--s-ly")]])}
+      <div id="f-chart"></div><p class="note" id="f-note"></p>
+    </div>
+    <div class="panel">
+      <div class="panel-h"><h2>How accurate is it?</h2><span class="muted">Backtest: trained without the last 8 weeks, then scored on them</span></div>
+      <div class="tbl-wrap"><table><thead><tr><th>Level</th><th class="r">SKUs</th><th class="r">This model</th><th class="r">Same week last year</th><th class="r">8-week average</th></tr></thead><tbody>
+      ${bt.map(r => `<tr><td>${esc(r.segment)}</td><td class="r">${n(r.skus)}</td><td class="r"><b>${(r.model_wape * 100).toFixed(1)}%</b></td><td class="r">${(r.seasonal_naive_wape * 100).toFixed(1)}%</td><td class="r">${(r.moving_avg_8wk_wape * 100).toFixed(1)}%</td></tr>`).join("")}
+      </tbody></table></div>
+      <p class="note">Error is WAPE (total absolute error ÷ total units; lower is better). Category totals are where planning happens and the model is within about ${Math.round(bt[bt.length - 1].model_wape * 100)}% there. Single-SKU weeks are noisy for slow movers, which is why reorder points carry safety stock instead of trusting one week's number.</p>
+    </div>`;
+  const draw = () => {
+    const sel = ci < 0 ? C : [C[ci]];
+    const sum = key => sel[0][key].map((_, j) => sel.reduce((a, c) => a + c[key][j], 0));
+    const act = sum("actual"), lyr = sum("last_year"), fc = sum("forecast");
+    const labels = [...D.meta.weeks, ...D.meta.future_weeks];
+    chart($("#f-chart", sec), {labels, h: 280, fmtX: fmtShort, splitAt: act.length, yLabel: "Weekly units",
+      series: [{name: "This year", values: [...act, ...fc.map(() => null)], color: css("--accent"), area: true},
+               {name: "Forecast", values: [...act.map((_, j) => j === act.length - 1 ? act[j] : null), ...fc], color: css("--accent"), dash: true, end: true},
+               {name: "Last year", values: [...lyr, ...act.slice(0, fc.length)], color: css("--s-ly")}]});
+    const nx4 = fc.slice(0, 4).reduce((a, b) => a + b, 0), ly4 = act.slice(0, 4).reduce((a, b) => a + b, 0), l4 = act.slice(-4).reduce((a, b) => a + b, 0);
+    $("#f-note", sec).innerHTML = `Next 4 weeks: <b>${n(nx4)}</b> units, ${nx4 >= l4 ? "up" : "down"} ${Math.abs(Math.round((nx4 / l4 - 1) * 100))}% on the last 4 weeks and ${nx4 >= ly4 ? "up" : "down"} ${Math.abs(Math.round((nx4 / ly4 - 1) * 100))}% on the same weeks last year.`;
+  };
+  draw(); redraws.push(draw);
+  $("#f-c", sec).querySelectorAll(".fchip").forEach(b => b.addEventListener("click", () => { ci = +b.dataset.c; $("#f-c", sec).querySelectorAll(".fchip").forEach(x => x.setAttribute("aria-pressed", x === b)); draw(); }));
+};
+
+views.ask = sec => { $("#dock").innerHTML = ""; mountChat(sec); };
+
+// ------------------------------------------------------------------ agent tools (run in the page)
+const T = {
+  get_briefing() { const b = D.meta.briefing; return {as_of: b.as_of, board: b.board, inventory: b.inventory, reorder_value: b.reorder_value, revenue_at_risk: b.revenue_at_risk, overstock_value: b.overstock_value, exceptions: b.exceptions, waves: b.waves, tomorrow: b.tomorrow, actions: b.actions}; },
+  async lookup_order({order_id}) {
+    const m = String(order_id ?? "").match(/(\d{7})/); if (!m) throw new Error("Order ids look like SO-1546575");
+    const id = "SO-" + m[1], o = (await loadOrders()).get(id);
+    if (!o) return {error: `${id} is not in this week's orders (earlier orders have shipped).`};
+    return {order_id: id, status: o.st, channel: o.ch, ship_method: o.sm, ship_by: o.by, placed: o.c, shipped_at: o.sh, picker: o.pk, wave: o.w, hold_reason: o.hold,
+      lines: o.l.map(([sku, q, a]) => { const i = skuIdx(sku); return {sku, name: D.skus.name[i], qty: q, allocated: a, slot: D.skus.loc[i]}; }),
+      exceptions: D.meta.exceptions.filter(e => e.order_id === id).map(e => ({type: e.type, detail: e.detail, action: e.action}))};
+  },
+  list_exceptions({type, limit = 15} = {}) {
+    let ex = D.meta.exceptions; if (type) ex = ex.filter(e => e.type.toLowerCase() === String(type).toLowerCase());
+    const by = {}; D.meta.exceptions.forEach(e => by[e.type] = (by[e.type] || 0) + 1);
+    return {total: ex.length, by_type: by, items: ex.slice(0, Math.min(+limit || 15, 40)).map(e => ({order_id: e.order_id, type: e.type, ship_method: e.ship_method, ship_by: e.ship_by, detail: e.detail, action: e.action}))};
+  },
+  search_skus({query = "", status, category, limit = 8} = {}) {
+    const k = D.skus, q = String(query).toLowerCase().split(/\s+/).filter(Boolean), out = [];
+    const sj = status ? k.statuses.findIndex(s => s.toLowerCase() === String(status).toLowerCase()) : -1;
+    const cj = category ? k.cats.findIndex(c => c.toLowerCase().includes(String(category).toLowerCase())) : -1;
+    const direct = q.length === 1 ? skuIdx(q[0]) : undefined;
+    if (direct !== undefined) out.push(direct);
+    else for (let i = 0; i < k.sku.length; i++) {
+      if (sj >= 0 && k.st[i] !== sj) continue; if (cj >= 0 && k.cat[i] !== cj) continue;
+      if (q.length) { const h = (k.sku[i] + " " + k.name[i]).toLowerCase(); if (!q.every(w => h.includes(w))) continue; }
+      out.push(i);
+    }
+    out.sort((a, b) => (k.rar[b] - k.rar[a]) || (k.ppw[b] - k.ppw[a]));
+    return {matches: out.length, items: out.slice(0, Math.min(+limit || 8, 25)).map(S)};
+  },
+  reorder_plan({supplier, category, limit = 15} = {}) {
+    const k = D.skus; let r = [];
+    for (let i = 0; i < k.sku.length; i++) if ((k.st[i] === 0 || k.st[i] === 1) && k.sq[i] > 0) r.push(i);
+    if (supplier) r = r.filter(i => k.suppliers[k.sup[i]].toLowerCase().includes(String(supplier).toLowerCase()));
+    if (category) r = r.filter(i => k.cats[k.cat[i]].toLowerCase().includes(String(category).toLowerCase()));
+    r.sort((a, b) => (k.st[a] - k.st[b]) || (k.rar[b] - k.rar[a]));
+    const by = {}; r.forEach(i => { const s = k.suppliers[k.sup[i]]; (by[s] ??= {skus: 0, units: 0, value: 0}); by[s].skus++; by[s].units += k.sq[i]; by[s].value = Math.round(by[s].value + k.sq[i] * k.cost[i]); });
+    return {skus: r.length, total_value: Math.round(r.reduce((a, i) => a + k.sq[i] * k.cost[i], 0)), by_supplier: by,
+      items: r.slice(0, Math.min(+limit || 15, 40)).map(i => { const s = S(i); return {sku: s.sku, name: s.name, status: s.status, available: s.available, on_order: s.on_order, reorder_point: s.reorder_point, order_qty: s.suggested_qty, supplier: s.supplier, lead_time_days: s.lead_time_days, revenue_at_risk: s.revenue_at_risk, runs_out: s.projected_stockout}; })};
+  },
+  stock_health({category} = {}) {
+    const k = D.skus, cj = category ? k.cats.findIndex(c => c.toLowerCase().includes(String(category).toLowerCase())) : -1;
+    const counts = {}; let ov = 0, rar = 0;
+    for (let i = 0; i < k.sku.length; i++) { if (cj >= 0 && k.cat[i] !== cj) continue; const s = k.statuses[k.st[i]]; counts[s] = (counts[s] || 0) + 1; ov += k.ovv[i]; rar += k.rar[i]; }
+    return {category: cj >= 0 ? k.cats[cj] : "All", counts, overstock_value: Math.round(ov), revenue_at_risk: Math.round(rar)};
+  },
+  async forecast({query}) {
+    const q = String(query ?? "");
+    const i = skuIdx(q.trim());
+    if (i !== undefined) { const s = await loadSales(); return {sku: D.skus.sku[i], name: D.skus.name[i], week_starting: s.future, forecast_units: s.f[i].split(",").map(Number), last_8_weeks_actual: s.h[i].split(",").slice(-8).map(Number), same_weeks_last_year: s.h[i].split(",").slice(0, 8).map(Number)}; }
+    const c = D.meta.categories.find(c => c.category.toLowerCase().includes(q.toLowerCase()));
+    if (!c) return {error: "Give a SKU id or one of: " + D.meta.categories.map(c => c.category).join(", ")};
+    return {category: c.category, week_starting: D.meta.future_weeks, forecast_units: c.forecast, same_weeks_last_year: c.actual.slice(0, 8), last_8_weeks_actual: c.actual.slice(-8), backtest_category_wape: D.meta.backtest.at(-1).model_wape};
+  },
+  wave_plan() { return {summary: D.meta.wave_summary, waves: D.meta.waves.map(w => ({wave_id: w.wave_id, orders: w.orders, lines: w.lines, overnight: w.overnight, expedited: w.expedited, est_minutes: w.est_minutes, zones: w.pick_lists.map(p => `${p.zone}: ${p.stops.length} stops`)}))}; },
+  pick_list({wave_id, zone}) {
+    const w = D.meta.waves.find(w => w.wave_id.toLowerCase() === String(wave_id ?? "").toLowerCase()); if (!w) return {error: "Waves: " + D.meta.waves.map(w => w.wave_id).join(", ")};
+    const p = w.pick_lists.find(p => p.zone === String(zone ?? "").toUpperCase().slice(0, 1)); if (!p) return {error: `Zones in ${w.wave_id}: ` + w.pick_lists.map(p => p.zone).join(", ")};
+    return {wave_id: w.wave_id, zone: p.zone, distance_m: p.distance_m, est_minutes: p.est_minutes, stops: p.stops.map(s => ({seq: s.seq, slot: s.location, sku: s.sku, name: s.name, qty: s.qty, orders: s.n_orders}))};
+  },
+  labor_plan() { return {days: D.meta.labor}; },
+  picker_performance() { return {pickers: D.meta.pickers.map(p => ({picker: p.picker, lines_per_hour: p.lines_per_hour, mispick_rate_pct: p.mispick_rate_pct, flag: p.flag}))}; },
+  slotting_moves({zone, limit = 10} = {}) {
+    const r = D.meta.slotting.filter(m => !zone || m.zone === String(zone).toUpperCase().slice(0, 1)).slice(0, Math.min(+limit || 10, 30));
+    return {zone_health: D.meta.zone_heat, moves: r.map(m => ({rank: m.rank, sku: m.sku, name: m.name, picks_per_week: m.picks_per_week, from: m.from_location, to: m.to_location, swap_with: m.swap_sku, hours_saved_per_week: m.hours_saved_per_week_batched}))};
+  },
+};
+const TOOL_DEFS = [
+  ["get_briefing", "Today's operations summary: order pipeline, exception counts, inventory health, waves ready, tomorrow's staffing, and the ranked to-do list.", null],
+  ["lookup_order", "Full status of one order this week: lines with slots, allocation, picker, wave, exceptions.", {order_id: {type: "string"}}, ["order_id"]],
+  ["list_exceptions", "Open order exceptions with recommended actions, most urgent first. Types: Late, At risk, Short, Stuck, On hold.", {type: {type: "string"}, limit: {type: "integer"}}],
+  ["search_skus", "Find SKUs by id or name words, optionally filtered by status (Stockout, Reorder now, Watch, Healthy, Overstock, Slow mover) or category. Returns stock, demand, reorder point, suggested order qty, slot.", {query: {type: "string"}, status: {type: "string"}, category: {type: "string"}, limit: {type: "integer"}}],
+  ["reorder_plan", "SKUs needing a purchase order now, grouped by supplier, with case-pack-rounded quantities. Filter by supplier or category.", {supplier: {type: "string"}, category: {type: "string"}, limit: {type: "integer"}}],
+  ["stock_health", "Counts of SKUs by stock status plus overstock value and revenue at risk, for all or one category.", {category: {type: "string"}}],
+  ["forecast", "Next 8 weeks of unit demand for a SKU id or a category name, with the same weeks last year.", {query: {type: "string"}}, ["query"]],
+  ["wave_plan", "Pick waves ready to release with order counts, priorities and walking saved vs single-order picking.", null],
+  ["pick_list", "Stop-by-stop pick list (slot, SKU, qty, in walking order) for one zone of one wave.", {wave_id: {type: "string"}, zone: {type: "string"}}, ["wave_id", "zone"]],
+  ["labor_plan", "Next 5 shipping days: expected orders, lines, and pickers needed with batch vs single-order picking.", null],
+  ["picker_performance", "Last 4 weeks per picker: lines per hour, mispick rate, coaching flags.", null],
+  ["slotting_moves", "Ranked slot swaps that move fast movers closer to the pack station, with hours saved per week.", {zone: {type: "string"}, limit: {type: "integer"}}],
+];
+const RULES = () => `You are PaperTrail, the operations agent for ${D.meta.company}, a stationery distributor shipping about 5,000 orders a week from a ${n(D.meta.history.skus)}-SKU warehouse (zones A-F, pack station at the front). The data is a realistic simulation. It is ${new Date(D.meta.now).toLocaleString("en-US", {weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit"})}; carrier pickup is 5:30 pm.
+Help the operations lead run the floor hands-off and help pickers do better work.
+- Get every number from the tools. Never invent order ids, SKUs, quantities or slots.
+- Lead with the decision or action, then one line of why. Short, scannable markdown; small tables are fine.
+- Say who needs to act (buyer approves POs, wave lead releases waves, supervisor coaches a picker).
+- Pick lists: slot, SKU, quantity, in walking order.
+- Be candid: single-SKU weekly forecasts are noisy for slow movers; category totals are reliable.`;
+
+// ------------------------------------------------------------------ local answers (no Claude)
+function mdTable(rows, cols, heads) { return "| " + (heads || cols).join(" | ") + " |\n|" + cols.map(() => "---").join("|") + "|\n" + rows.map(r => "| " + cols.map(c => r[c] ?? "").join(" | ") + " |").join("\n"); }
+async function localAnswer(q) {
+  const ql = q.toLowerCase();
+  let m = ql.match(/so-?\s?(\d{7})/);
+  if (m) { const r = await T.lookup_order({order_id: m[1]}); if (r.error) return r.error;
+    return `**${r.order_id}** — ${r.status} · ${r.ship_method} · ship by ${fmtDay(r.ship_by)}${r.picker ? " · " + r.picker : ""}\n\n` + mdTable(r.lines, ["slot", "sku", "name", "qty", "allocated"]) + r.exceptions.map(e => `\n\n**${e.type}:** ${e.detail} → ${e.action}`).join(""); }
+  m = ql.match(/\bpt-?\s?(\d{5})\b/);
+  if (m) { const r = T.search_skus({query: "PT-" + m[1]}); if (!r.items.length) return "No SKU PT-" + m[1]; const s = r.items[0];
+    return `**${s.sku}** ${s.name}\n\n- **${s.status}** · class ${s.abc} · slot \`${s.location}\`\n- Available ${n(s.available)}, on order ${n(s.on_order)}${s.next_po_eta ? " (arrives " + fmtDay(s.next_po_eta) + ")" : ""}\n- Demand ≈ ${s.daily_demand}/day · reorder point ${n(s.reorder_point)} · ${s.days_of_cover == null ? "no recent demand" : n(s.days_of_cover) + " days of cover"}\n- ${s.suggested_qty ? `**Order ${n(s.suggested_qty)}** from ${s.supplier} (${s.lead_time_days}-day lead time)` : "No purchase needed this week"}`; }
+  if (/wave|pick list|picklist|release/.test(ql)) { const r = T.wave_plan(), s = r.summary;
+    return `**${s.waves} waves** for ${s.orders} orders. Batch + zone picking walks **${s.walking_saved_pct}% less** (${s.distance_km} km vs ${s.single_order_distance_km} km).\n\n` + mdTable(r.waves, ["wave_id", "orders", "lines", "overnight", "est_minutes"], ["Wave", "Orders", "Lines", "Overnight", "Minutes"]) + "\n\nOpen the Pick waves tab for stop-by-stop lists."; }
+  if (/reorder|purchase|\bpo\b|buy|replenish/.test(ql)) { const r = T.reorder_plan({limit: 8});
+    return `**${n(r.skus)} SKUs need a PO**, ${money(r.total_value)} at cost.\n\n` + mdTable(Object.entries(r.by_supplier).map(([s, v]) => ({s, ...v, value: money(v.value)})), ["s", "skus", "units", "value"], ["Supplier", "SKUs", "Units", "Value"]) + "\n\n**Most urgent**\n\n" + mdTable(r.items, ["sku", "status", "available", "order_qty", "supplier"], ["SKU", "Status", "Avail", "Order", "Supplier"]); }
+  if (/tomorrow|staff|headcount|labou?r|how many pickers/.test(ql)) return "**Staffing plan**\n\n" + mdTable(D.meta.labor.map(d => ({...d, day: fmtDay(d.date)})), ["day", "orders", "lines", "pickers_needed", "pickers_needed_single_order"], ["Day", "Orders", "Lines", "Pickers (batch)", "Pickers (single)"]);
+  if (/picker|coach|mispick|accuracy|productiv/.test(ql)) return "**Pickers, last 4 weeks**\n\n" + mdTable(T.picker_performance().pickers, ["picker", "lines_per_hour", "mispick_rate_pct", "flag"], ["Picker", "Lines/hr", "Mispick %", "Note"]);
+  if (/slot|closer|layout|fast mover|move/.test(ql)) return "**Top slot swaps**\n\n" + mdTable(T.slotting_moves({limit: 8}).moves, ["rank", "sku", "from", "to", "picks_per_week"], ["#", "SKU", "From", "To", "Picks/wk"]);
+  if (/stock|inventory|overstock/.test(ql)) { const r = T.stock_health(); return "**Inventory health**\n\n" + Object.entries(r.counts).map(([k, v]) => `- ${k}: ${n(v)}`).join("\n") + `\n\nRevenue at risk ${money(r.revenue_at_risk)} · overstock ${money(r.overstock_value)}`; }
+  if (/exception|late|stuck|hold|short|problem|issue|risk/.test(ql)) { const r = T.list_exceptions({limit: 10}); return `**${r.total} open exceptions** (${Object.entries(r.by_type).map(([k, v]) => k + " " + v).join(", ")})\n\n` + mdTable(r.items, ["order_id", "type", "action"], ["Order", "Type", "Do this"]); }
+  if (/forecast|demand/.test(ql)) { const c = D.meta.categories.find(c => c.category.toLowerCase().split(/[\s&]+/).some(w => w.length > 3 && ql.includes(w)));
+    if (c) { const r = await T.forecast({query: c.category}); return `**${c.category}**, weekly units\n\n` + mdTable(r.week_starting.map((w, j) => ({w: fmtShort(w), f: n(r.forecast_units[j]), l: n(r.same_weeks_last_year[j])})), ["w", "f", "l"], ["Week of", "Forecast", "Last year"]); } }
+  const b = T.get_briefing();
+  return `**So far today:** ${b.board.orders_today} orders in, ${b.board.shipped_today} shipped, ${b.board.open} open (${b.board.due_today_open} due today).\n\n**Do next**\n\n` + b.actions.map((a, i) => `${i + 1}. **${a.text}** — ${a.detail}`).join("\n") + `\n\n**${b.tomorrow.weekday}:** ~${n(b.tomorrow.orders)} orders → ${b.tomorrow.pickers_needed} pickers with batch picking.`;
+}
+
+// ------------------------------------------------------------------ markdown (small, safe)
+function md(src) {
+  const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<span class='bin'>$1</span>").replace(/(^|[^*])\*([^*\s][^*]*?)\*/g, "$1<i>$2</i>");
+  const lines = src.replace(/\r/g, "").split("\n"); let out = "", i = 0;
+  while (i < lines.length) {
+    const l = lines[i];
+    if (/^\s*\|/.test(l)) { const rows = []; while (i < lines.length && /^\s*\|/.test(lines[i])) rows.push(lines[i++]);
+      const cells = r => r.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+      const body = rows.filter((r, j) => !(j === 1 && /^[\s|:-]+$/.test(r)));
+      out += `<div class="tw"><table><thead><tr>${cells(body[0]).map(c => `<th>${inline(c)}</th>`).join("")}</tr></thead><tbody>${body.slice(1).map(r => `<tr>${cells(r).map(c => `<td>${inline(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`; continue; }
+    if (/^\s*[-*] /.test(l)) { out += "<ul>"; while (i < lines.length && /^\s*[-*] /.test(lines[i])) out += `<li>${inline(lines[i++].replace(/^\s*[-*] /, ""))}</li>`; out += "</ul>"; continue; }
+    if (/^\s*\d+[.)] /.test(l)) { out += "<ol>"; while (i < lines.length && /^\s*\d+[.)] /.test(lines[i])) out += `<li>${inline(lines[i++].replace(/^\s*\d+[.)] /, ""))}</li>`; out += "</ol>"; continue; }
+    const h = l.match(/^(#{1,4})\s+(.*)/); if (h) { out += `<p><b>${inline(h[2])}</b></p>`; i++; continue; }
+    if (l.trim()) { let p = l; i++; while (i < lines.length && lines[i].trim() && !/^\s*(\||[-*] |\d+[.)] |#)/.test(lines[i])) p += " " + lines[i++]; out += `<p>${inline(p)}</p>`; } else i++;
+  }
+  return out;
+}
+
+// ------------------------------------------------------------------ chat
+const chatState = {turns: [], mode: "checking", sample: null, ctl: null, busy: false, log: []};
+const SUGG = ["What should I deal with first?", "Which orders will miss the truck?", "Plan the next waves", "Which POs do I approve today?", "How many pickers tomorrow?", "Who needs coaching?", "Top slotting moves for zone A", "Forecast for planners"];
+async function detectMode() {
+  try {
+    if (window.claude?.use) { const s = await window.claude.use("sample"); if (s) { chatState.sample = s; return "claude"; } }
+  } catch {}
+  try { const r = await fetch("api/health", {cache: "no-store"}); if (r.ok) { const j = await r.json(); if (j.ok) return j.llm ? "server" : "server-local"; } } catch {}
+  return "local";
+}
+const MODE_TEXT = {checking: "Connecting…", claude: "Claude · answers from live tools", server: "Claude via your server", "server-local": "Local answers (no API key on server)", local: "Local answers (Claude not connected)"};
+function mountChat(host) {
+  host.innerHTML = `<div class="chat">
+    <div class="chat-h"><div><h3>Ask PaperTrail <span class="muted" style="font-weight:500;font-size:.8rem">· your assistant</span></h3><span class="mode muted" id="c-mode">${MODE_TEXT[chatState.mode]}</span></div><button class="linkbtn" id="c-stop" hidden>Stop</button></div>
+    <div class="msgs" id="c-msgs" aria-live="polite"></div>
+    <div class="eyebrow" style="padding:0 14px 6px">Tap a question to start</div><div class="sugg" id="c-sugg">${SUGG.map(s => `<button>${esc(s)}</button>`).join("")}</div>
+    <form id="c-form"><textarea id="c-in" rows="1" placeholder="Type a question, e.g. Which orders will miss the truck?" aria-label="Message"></textarea><button class="btn" id="c-send">Send</button></form></div>`;
+  const msgs = $("#c-msgs", host);
+  if (!chatState.log.length) chatState.log.push({r: "a", html: md(`I'm watching ${n(D.meta.briefing.board.open)} open orders, ${n(D.meta.exceptions.length)} exceptions and ${n(D.meta.history.skus)} SKUs. Here's how to use me:\n\n- Ask in plain words, like you would a colleague.\n- Type an order number (like SO-1546575) or an item number (like PT-10234) to look it up.\n- Tap a question below to get started. Not sure where to begin? Try the first one.\n\nNeed instructions? Press **? Guide** at the top.`)});
+  const paint = () => { msgs.innerHTML = chatState.log.map(m => `<div class="msg ${m.r}">${m.html}${m.tools ? `<div class="tools">${esc(m.tools)}</div>` : ""}</div>`).join(""); msgs.scrollTop = msgs.scrollHeight; };
+  paint();
+  if (chatState.mode === "checking") detectMode().then(m => { chatState.mode = m; const el = $("#c-mode"); if (el) el.textContent = MODE_TEXT[m]; });
+  const send = async text => {
+    text = text.trim(); if (!text || chatState.busy) return;
+    chatState.busy = true; $("#c-send", host).disabled = true;
+    chatState.log.push({r: "u", html: esc(text)});
+    const slot = {r: "a", html: `<span class="thinking">Thinking…</span>`}; chatState.log.push(slot); paint();
+    const used = [];
+    try {
+      if (chatState.mode === "checking") chatState.mode = await detectMode();
+      if (chatState.mode === "claude") {
+        chatState.turns.push({role: "user", content: text});
+        const ctl = new AbortController(); chatState.ctl = ctl; $("#c-stop", host).hidden = false;
+        const tools = TOOL_DEFS.map(([name, description, props, req]) => ({name, description,
+          ...(props ? {inputSchema: {type: "object", properties: props, required: req || []}} : {}),
+          execute: async input => { used.push(name); slot.tools = "Checked: " + [...new Set(used)].join(", "); paint(); return await T[name](input || {}); }}));
+        const turns = [{role: "user", content: RULES()}, ...chatState.turns.slice(-8)];
+        if (turns[1]?.role === "assistant") turns.splice(1, 1);
+        const res = await chatState.sample(turns, {tools, signal: ctl.signal, modelTier: "quick",
+          onText: ({text: t}) => { slot.html = md(t); paint(); }});
+        slot.html = md(res.text); chatState.turns.push({role: "assistant", content: res.text});
+      } else if (chatState.mode === "server") {
+        const r = await fetch("api/agent", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({question: text, history: chatState.turns.slice(-8)})});
+        const j = await r.json(); slot.html = md(j.text); if (j.tools_used?.length) slot.tools = "Checked: " + j.tools_used.join(", ");
+        chatState.turns.push({role: "user", content: text}, {role: "assistant", content: j.text});
+      } else {
+        slot.html = md(await localAnswer(text)); slot.tools = "Answered from the dashboard data";
+      }
+    } catch (e) {
+      const code = e?.code;
+      if (code === "cancelled") slot.html = (e.text ? md(e.text) : "") + `<p class="muted">Stopped.</p>`;
+      else if (code === "not_granted" || code === "sampling_disabled" || code === "capability_disabled" || code === "tools_unavailable") {
+        chatState.mode = "local"; $("#c-mode") && ($("#c-mode").textContent = MODE_TEXT.local);
+        chatState.turns.pop(); slot.html = md(await localAnswer(text)); slot.tools = "Claude isn't allowed here, so this is a local answer";
+      } else if (code === "rate_limited") slot.html = `<p>Claude is busy for your account right now. Here's the local answer instead:</p>` + md(await localAnswer(text));
+      else { slot.html = (e?.text ? md(e.text) : "") + md(await localAnswer(text)); slot.tools = "Claude didn't answer, so this is a local answer"; }
+    } finally {
+      chatState.busy = false; chatState.ctl = null; paint();
+      const sb = $("#c-send"); if (sb) sb.disabled = false; const st = $("#c-stop"); if (st) st.hidden = true;
+    }
+  };
+  $("#c-form", host).addEventListener("submit", e => { e.preventDefault(); const t = $("#c-in", host); send(t.value); t.value = ""; });
+  $("#c-in", host).addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#c-form", host).requestSubmit(); } });
+  $("#c-sugg", host).querySelectorAll("button").forEach(b => b.addEventListener("click", () => send(b.textContent)));
+  $("#c-stop", host).addEventListener("click", () => chatState.ctl?.abort());
+}
+
+// ------------------------------------------------------------------ boot
+(async () => {
+  try {
+    const [meta, skus] = await Promise.all([getJSON("data/meta.json"), getJSON("data/skus.json")]);
+    D.meta = meta; D.skus = skus; skus.sku.forEach((s, i) => D.idx.set(s, i));
+    header();
+    const start = (location.hash || "").slice(1);
+    show(views[start] ? start : "today");
+    setTimeout(() => { loadSales().catch(() => {}); loadOrders().catch(() => {}); }, 1500);
+  } catch (e) {
+    $("#main").innerHTML = `<div class="loading">Couldn't load the data files (${esc(e.message)}). Run <span class="mono">python -m papertrail.export</span> and serve this folder.</div>`;
+  }
+})();
+})();
+</script>
