@@ -1,6 +1,6 @@
 # PaperTrail
 
-![PaperTrail](docs/wallpaper.png)
+![PaperTrail one-page guide](docs/flyer.png)
 
 **An AI operations agent for a high-volume stationery warehouse.** It watches the order pipeline, tells the ops lead what to deal with first, builds pick waves with walking-order pick lists, keeps reorder points honest, and finds the slot moves that cut the most walking.
 
